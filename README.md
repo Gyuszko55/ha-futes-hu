@@ -19,14 +19,23 @@ Egy valós, gázkazános, radiátoros otthoni fűtésrendszerből általánosít
 
 ---
 
-## Követelmények
+## Telepítés feltételei – mit kell előre telepíteni
 
-- **Home Assistant 2025.10 vagy újabb.**
-- Egy **climate** entitás presetekkel (`home`, `sleep`, `away`, `eco` …), például:
-  - [Smart Thermostat (PID)](https://github.com/ScratMan/HASmartThermostat) (HACS) – a PID-hangoló szekcióhoz ez kell. Példa-beállítás: [docs/pelda_smart_thermostat.yaml](docs/pelda_smart_thermostat.yaml);
-  - vagy a beépített `generic_thermostat` presetekkel, vagy a [Better Thermostat](https://github.com/KartoffelToby/better_thermostat).
-- **A kártyához:** HACS → [Better Thermostat UI](https://github.com/KartoffelToby/better-thermostat-ui-card) kártya.
-- **Ablaknyitásnál a fűtés leállításához** (nem része a csomagnak, mert van rá jó közösségi blueprint): keresd a Blueprint Exchange-en a „Window open, climate off” (SmartLiving.Rocks) blueprintet.
+| # | Mit | Honnan / hogyan | Kötelező? |
+|---|---|---|---|
+| 1 | **Home Assistant 2025.10 vagy újabb** | Beállítások → Rendszer → Frissítések | igen |
+| 2 | **A kazánt kapcsoló relé**, a HA-ban `switch` entitásként (pl. Shelly, Sonoff, Zigbee relé a kazán termosztát-bemenetén) | a relé integrációja | igen |
+| 3 | **Benti hőmérő** a fő helyiségben | a hőmérő integrációja | igen |
+| 4 | **Kinti hőmérő** (időjárás-állomás vagy kültéri szenzor) | a szenzor integrációja | a napi döntéshez és a PID-hangoláshoz |
+| 5 | **Egy termosztát (`climate`) presetekkel**: | | igen |
+|   | – [Smart Thermostat (PID)](https://github.com/ScratMan/HASmartThermostat) (ajánlott, a PID-hangoláshoz ez kell) | HACS → Integrációk → „Smart Thermostat (PID)” → Letöltés → újraindítás → YAML-beállítás: [docs/pelda_smart_thermostat.yaml](docs/pelda_smart_thermostat.yaml) | |
+|   | – vagy a beépített `generic_thermostat` presetekkel | configuration.yaml | |
+| 6 | **[HACS](https://hacs.xyz/)** | https://hacs.xyz/docs/use/ | a 5. és 7. ponthoz |
+| 7 | **Better Thermostat UI** kártya | HACS → Frontend → „Better Thermostat UI” → Letöltés | a kártyához |
+| 8 | **Teljesítménymérő a kazánon** (pl. Shelly Plug) | a mérő integrációja | nem. Ha van, a „tényleges fűtés” pontosabb. |
+| 9 | **Ablak/ajtó-nyitásérzékelők** és a „Window open, climate off” közösségi blueprint (SmartLiving.Rocks, Blueprint Exchange) | az érzékelők integrációja; Blueprint importálása | nem, de ajánlott |
+| 10 | **Home Assistant Companion app** a telefonokon, `person` entitásokhoz rendelve | App Store / Google Play; Beállítások → Emberek | a jelenléthez |
+| 11 | **Csomagok bekapcsolása** a `configuration.yaml`-ban (`packages: !include_dir_named packages`) | lásd lent, 2. lépés | a csomagokhoz |
 
 ## Telepítés
 

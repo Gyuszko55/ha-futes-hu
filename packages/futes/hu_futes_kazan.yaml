@@ -1,0 +1,131 @@
+# Kazán: tényleges fűtés, napi fűtési idő, gázfogyasztás-becslés (gázmérő nélkül),
+# benti hőmérséklet-trend (a kazánhiba-figyelőhöz) és a fűtés segédei.
+#
+# Beállítás a felületen (Beállítások → Eszközök és szolgáltatások → Segédek):
+#   „Kazán – relé/kapcsoló”      pl. switch.kazan_rele          (kötelező)
+#   „Kazán – teljesítmény-szenzor” pl. sensor.kazan_power (W)   (nem kötelező: ha van, csak
+#                                   a küszöb fölötti fogyasztás számít „tényleges fűtésnek”)
+#   „Kazán – névleges teljesítmény” kW (a kazán adattábláján; 0 = nincs gázbecslés)
+#   „Gáz fűtőértéke”               kWh/m³ (0 = 9,5; a számlán szereplő érték is megadható)
+#   „Fűtés – benti hőmérő”         pl. sensor.nappali_homerseklet (a trendhez)
+#
+# Gázbecslés: napi fűtési idő (óra) × kazán kW ÷ fűtőérték. Közelítés: a kazán modulál, a valós
+# fogyasztás ennél kevesebb is lehet – a becslést egy valódi gázóra-leolvasással érdemes arányosítani
+# (a kW érték finomításával).
+
+input_text:
+  kazan_rele:
+    name: "Kazán – relé/kapcsoló (entitás)"
+    max: 255
+    icon: mdi:electric-switch
+  kazan_teljesitmeny_szenzor:
+    name: "Kazán – teljesítmény-szenzor (entitás, üres = nincs)"
+    max: 255
+    icon: mdi:flash
+  futes_benti_homero:
+    name: "Fűtés – benti hőmérő (entitás)"
+    max: 255
+    icon: mdi:home-thermometer
+
+input_number:
+  kazan_teljesitmeny_kuszob:
+    name: "Kazán – fűtés küszöb (W)"
+    min: 0
+    max: 500
+    step: 1
+    unit_of_measurement: W
+    mode: box
+    icon: mdi:flash-alert
+  kazan_nevleges_kw:
+    name: "Kazán – névleges teljesítmény (0 = nincs becslés)"
+    min: 0
+    max: 100
+    step: 0.01
+    unit_of_measurement: kW
+    mode: box
+    icon: mdi:fire
+  gaz_futoertek:
+    name: "Gáz fűtőértéke (0 = 9,5)"
+    min: 0
+    max: 15
+    step: 0.01
+    unit_of_measurement: kWh/m³
+    mode: box
+    icon: mdi:fire-circle
+
+input_boolean:
+  futes_auto:
+    name: "Fűtés automatika"
+    icon: mdi:robot
+  kazan_hiba:
+    name: "Kazánhiba gyanú"
+    icon: mdi:fire-alert
+
+input_select:
+  futes_evszak:
+    name: "Fűtés évszak-sáv"
+    options:
+      - "Hideg"
+      - "Hűvös"
+      - "Enyhe"
+    icon: mdi:calendar-range
+
+template:
+  - binary_sensor:
+      - name: "Kazán ténylegesen fűt"
+        unique_id: kazan_tenylegesen_fut
+        default_entity_id: binary_sensor.kazan_tenylegesen_fut
+        device_class: heat
+        availability: "{{ states(states('input_text.kazan_rele')) not in ['unknown', 'unavailable'] }}"
+        state: >-
+          {% set p = states('input_text.kazan_teljesitmeny_szenzor') %}
+          {{ is_state(states('input_text.kazan_rele'), 'on') and
+             (p in ['', 'unknown', 'unavailable'] or
+              states(p) | float(0) > states('input_number.kazan_teljesitmeny_kuszob') | float(0)) }}
+  - sensor:
+      - name: "Fűtés benti hőmérséklet"
+        unique_id: futes_benti_homerseklet
+        default_entity_id: sensor.futes_benti_homerseklet
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: "{{ states(states('input_text.futes_benti_homero')) | is_number }}"
+        state: "{{ states(states('input_text.futes_benti_homero')) | float }}"
+      - name: "Kazán gáz napi"
+        unique_id: kazan_gaz_napi
+        default_entity_id: sensor.kazan_gaz_napi
+        unit_of_measurement: "m³"
+        device_class: gas
+        state_class: total_increasing
+        icon: mdi:gas-burner
+        availability: >-
+          {{ states('sensor.kazan_futesi_ido') | is_number and states('input_number.kazan_nevleges_kw') | float(0) > 0 }}
+        state: >-
+          {% set f = states('input_number.gaz_futoertek') | float(0) %}
+          {{ (states('sensor.kazan_futesi_ido') | float * states('input_number.kazan_nevleges_kw') | float
+              / (f if f > 0 else 9.5)) | round(3) }}
+
+sensor:
+  - platform: history_stats
+    name: "Kazán fűtési idő"
+    unique_id: kazan_futesi_ido
+    entity_id: binary_sensor.kazan_tenylegesen_fut
+    state: "on"
+    type: time
+    start: "{{ today_at() }}"
+    end: "{{ now() }}"
+  - platform: derivative
+    name: "Fűtés benti trend"
+    unique_id: futes_benti_trend
+    source: sensor.futes_benti_homerseklet
+    unit_time: h
+    time_window: "00:30:00"
+    round: 2
+
+# Soha nem nullázódó gáz-összesítő a napi becslésből (HA Energia irányítópulthoz is).
+utility_meter:
+  kazan_gaz_osszesen:
+    name: "Kazán gáz összesen"
+    unique_id: kazan_gaz_osszesen
+    source: sensor.kazan_gaz_napi
+    periodically_resetting: true

@@ -1,0 +1,85 @@
+# Háztartás-jelenlét: Otthon / Távol / Szabadság.
+# Minden person.* entitásból (a kizártak kivételével), beállítás nélkül:
+#   Otthon    – a személy 'home' állapotban van;
+#   Távol     – nincs otthon (bármilyen zónában vagy zónán kívül), a távozás óta < küszöb;
+#   Szabadság – a távozás óta ≥ küszöb (alap: 12 óra).
+# Háztartás: bárki Otthon → Otthon; különben bárki Távol → Távol; különben Szabadság.
+# A távozások időpontját egy trigger-alapú szenzor tárolja (percenként; HA-újraindítás után is megmarad).
+# Aki a telepítéskor már távol van, annak a távolléte a telepítéstől számít.
+# Fontos: a zónák (pl. „Munkahely”) is távollétnek számítanak – nem csak a „not_home”.
+
+input_text:
+  jelenlet_kizart:
+    name: "Jelenlét – kizárt személyek"
+    # Vesszővel elválasztott person entitások, pl. "person.vendeg, person.haziallat"
+    max: 255
+    icon: mdi:account-off-outline
+
+input_number:
+  szabadsag_kuszob:
+    name: "Szabadság küszöb (0 = 12 óra)"
+    min: 0
+    max: 168
+    step: 1
+    unit_of_measurement: h
+    mode: box
+    icon: mdi:timer-sand
+
+template:
+  # Távozások naplója: {person.x: "ISO időpont"}. Percenként frissül: aki nincs otthon és még nincs
+  # benne, bekerül a mostani időponttal; aki otthon van, kikerül. (Percnyi pontosság, kis terhelés.)
+  - triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: homeassistant
+        event: start
+    sensor:
+      - name: "Jelenlét távozások"
+        unique_id: jelenlet_tavozasok
+        default_entity_id: sensor.jelenlet_tavozasok
+        icon: mdi:home-export-outline
+        state: "{{ (this.attributes.tavozasok if this.attributes.tavozasok is defined and this.attributes.tavozasok is mapping else {}) | count }}"
+        attributes:
+          tavozasok: >-
+            {% set d = this.attributes.tavozasok if this.attributes.tavozasok is defined and this.attributes.tavozasok is mapping else {} %}
+            {% set ns = namespace(o={}) %}
+            {% for p in states.person if p.state != 'home' %}
+              {# ismeretlen állapotnál (pl. induláskor) a meglévő bejegyzés megmarad #}
+              {% if p.state not in ['unknown', 'unavailable'] or p.entity_id in d %}
+                {% set ns.o = dict(ns.o, **{p.entity_id: d.get(p.entity_id, now().isoformat())}) %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.o }}
+
+  - sensor:
+      - name: "Háztartás jelenlét"
+        unique_id: haztartas_jelenlet
+        default_entity_id: sensor.haztartas_jelenlet
+        icon: >-
+          {{ {'Otthon':'mdi:home-heart','Távol':'mdi:home-export-outline','Szabadság':'mdi:palm-tree'}.get(this.state, 'mdi:home-alert') }}
+        state: >-
+          {% set kizart = states('input_text.jelenlet_kizart').replace(' ', '').split(',') %}
+          {% set k = states('input_number.szabadsag_kuszob') | float(0) %}
+          {% set kuszob = k if k > 0 else 12 %}
+          {% set tav = state_attr('sensor.jelenlet_tavozasok', 'tavozasok') or {} %}
+          {% set ns = namespace(s=[]) %}
+          {% for p in states.person if p.entity_id not in kizart and p.state not in ['unknown', 'unavailable'] %}
+            {% if p.state == 'home' %}{% set ns.s = ns.s + ['Otthon'] %}
+            {% else %}
+              {% set t = as_datetime(tav[p.entity_id]) if p.entity_id in tav else now() %}
+              {% set ns.s = ns.s + ['Szabadság' if (now() - t).total_seconds() / 3600 >= kuszob else 'Távol'] %}
+            {% endif %}
+          {% endfor %}
+          {% if 'Otthon' in ns.s %}Otthon
+          {% elif 'Távol' in ns.s %}Távol
+          {% elif 'Szabadság' in ns.s %}Szabadság
+          {% else %}{{ this.state if this.state in ['Otthon', 'Távol', 'Szabadság'] else 'Otthon' }}
+          {% endif %}
+        attributes:
+          otthon: >-
+            {% set kizart = states('input_text.jelenlet_kizart').replace(' ', '').split(',') %}
+            {{ states.person | rejectattr('entity_id', 'in', kizart) | selectattr('state', 'eq', 'home') | map(attribute='name') | list }}
+          szemelyek: >-
+            {% set kizart = states('input_text.jelenlet_kizart').replace(' ', '').split(',') %}
+            {{ states.person | rejectattr('entity_id', 'in', kizart) | map(attribute='entity_id') | list }}
+          szabadsag_kuszob_ora: "{{ states('input_number.szabadsag_kuszob') | float(0) or 12 }}"

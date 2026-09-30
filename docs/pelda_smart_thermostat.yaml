@@ -1,0 +1,32 @@
+# Példa: Smart Thermostat (PID) gázkazánhoz, radiátoros fűtéshez.
+# HACS → Integrációk → „Smart Thermostat (PID)” (ScratMan/HASmartThermostat).
+# configuration.yaml:  climate: !include climate.yaml   (vagy közvetlenül a configuration.yaml-ba)
+# Az értékek egy valós rendszerből valók – a saját házadhoz hangolni kell.
+
+- platform: smart_thermostat
+  name: Fűtés
+  unique_id: smart_thermostat_futes
+  heater: switch.kazan_rele                # a kazán relé
+  target_sensor: sensor.nappali_homerseklet
+  outdoor_sensor: sensor.kulso_homerseklet # kültéri kompenzáció (ke)
+  ac_mode: false
+  min_temp: 16
+  max_temp: 25
+  target_temp_step: 0.1
+  target_temp: 22
+  min_cycle_duration: "00:05:00"           # kazánvédelem
+  min_off_cycle_duration: "00:10:00"
+  sampling_period: 300                     # 5 perc
+  pwm: "00:30:00"                          # radiátorhoz
+  kp: 10
+  ki: 0.00015                              # a blueprint 4. szekciója évszakonként állítja
+  kd: 8000
+  ke: 0.5
+  keep_alive:
+    seconds: 60
+  away_temp: 18
+  eco_temp: 17.5
+  comfort_temp: 22
+  home_temp: 22
+  sleep_temp: 20
+  activity_temp: 20

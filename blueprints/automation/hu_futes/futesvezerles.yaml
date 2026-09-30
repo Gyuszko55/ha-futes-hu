@@ -1,0 +1,688 @@
+blueprint:
+  name: "Fűtésvezérlés (ütemezés, távollét, napi döntés, PID-hangolás, kazánfelügyelet)"
+  description: >
+    Egy valós, éles Smart Thermostat (PID) alapú fűtésrendszerből
+    általánosított, moduláris automatizálás-csomag. Forrás és leírás:
+    https://github.com/Gyuszko55/ha-futes-hu HAT, EGYMÁSTÓL
+    FÜGGETLEN, egyenként ki/bekapcsolható szekció - csak azokat aktiváld,
+    amikre szükséged van:
+
+    1. ÉJSZAKAI VISSZAVÉTEL - esti/reggeli preset-váltás időzítve.
+    2. TÁVOLLÉT PRESET - ha a megadott személyek közül senki sincs
+    otthon (zónában is távollétnek számít), alacsonyabb hőfokra vált;
+    hazaérkezéskor napszaktól függően áll vissza. (Háromállapotú
+    Otthon/Távol/Szabadság működéshez használd inkább a „Jelenlét alapú
+    preset” blueprintet.)
+    3. NAPI BE/KI DÖNTÉS - naponta egyszer (pl. éjfél után) eldönti egy
+    kültéri/beltéri hőmérséklet-pár alapján, hogy aznap egyáltalán
+    fusson-e a fűtés (hiszterézissel, hogy ne kapcsolgasson feleslegesen).
+    HA-indításkor is lefut egyszer (30 mp késleltetéssel) - ha a
+    rendszer épp a szokásos időpontban volt lekapcsolva, ez pótolja a
+    kimaradt döntést, ahelyett hogy a következő napig várna.
+    4. SZEZONÁLIS PID-HANGOLÁS - a kültéri hőmérséklet 3 sávja szerint
+    automatikusan finomhangolja a PID "ki" (integrál) tagját - télen
+    erősebb, enyhe időben gyengébb integrál kell a túllövés elkerülésére.
+    HA-indításkor is lefut egyszer (30 mp késleltetéssel), az AKTUÁLIS
+    kültéri hőmérséklet alapján azonnal beállítva a helyes sávot -
+    enélkül egy stabil időszakban történő újraindítás után a gain a
+    climate entitás YAML-ban rögzített induló értékén ragadna, amíg egy
+    valódi új sávváltás nem történik (ez akár hetekig is eltarthat).
+    5. KAZÁN-/HŐTERMELŐ-FELÜGYELET - riaszt, ha a fűtés hosszú ideje
+    folyamatosan megy, de a beltéri hőmérséklet mégsem emelkedik
+    (lehetséges lángőr-hiba, gázhiány, légzár, szivattyú-hiba stb.).
+    6. ABLAK/AJTÓ-FIGYELEMBEVÉTEL - egy vagy több nyitásérzékelő
+    megadásával a felügyelet (5. pont) NEM riaszt, ha közben nyitva van
+    valamelyik - egy hosszan nyitva hagyott ablak miatti legitim
+    hőveszteséget könnyű lenne tévesen hőtermelési hibának nézni. Mivel
+    ez a lista a te saját, explicit megadásod, tetszőleges számú
+    érzékelőt felsorolhatsz - nem függ egy esetlegesen hiányos, máshol
+    (pl. egy HA group helperben) definiált gyűjtőtől.
+
+    ELŐFELTÉTELEK:
+    - A megadott climate entitásnak legyen `preset_mode` támogatása a
+      használt preset-nevekkel (pl. Smart Thermostat, generic_thermostat
+      presetekkel, vagy bármi más ilyen climate integráció).
+    - A szezonális PID-hangoláshoz a climate entitás integrációjának
+      támogatnia kell a `smart_thermostat.set_pid_gain` és
+      `smart_thermostat.clear_integral` szolgáltatásokat (ez a "Smart
+      Thermostat" HACS-integráció sajátja - más climate integrációnál ezt
+      a szekciót hagyd kikapcsolva).
+    - Egy előre létrehozott input_boolean helper a fő kapcsolóhoz.
+
+    MEGJEGYZÉS az ablak/ajtó-nyitás alapú biztonsági KIKAPCSOLÁSRÓL
+    (a fűtés leállítása, ha nyitva marad egy ablak): erre már létezik egy
+    kész, célszerű közösségi blueprint
+    ("SmartLiving.Rocks/window-open-climate-off.yaml") - ez a csomag
+    szándékosan NEM duplikálja azt, használd azt külön, ugyanerre a
+    climate entitásra. A 6. pont (fent) csak a felügyelet HAMIS
+    RIASZTÁSÁT előzi meg, nem kapcsolja ki a fűtést.
+  domain: automation
+  author: Gyuszko55 (Claude segítségével)
+  source_url: https://github.com/Gyuszko55/ha-futes-hu/blob/main/blueprints/automation/hu_futes/futesvezerles.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    climate_entity:
+      name: Fűtés climate entitása
+      selector:
+        entity:
+          domain: climate
+    master_enable:
+      name: Fő kapcsoló (input_boolean helper)
+      description: >
+        Előre létrehozott input_boolean, amivel az egész csomag (minden
+        alábbi szekció) egyszerre ki/bekapcsolható.
+      selector:
+        entity:
+          domain: input_boolean
+    person_entities:
+      name: Figyelt személyek (opcionális)
+      description: >
+        Az "éjszakai visszavétel" jelenlét-feltételéhez és a "távollét
+        preset" szekcióhoz kell - hagyd üresen, ha egyiket sem használod.
+      default: []
+      selector:
+        entity:
+          domain: person
+          multiple: true
+
+    schedule_section:
+      name: "1. Éjszakai visszavétel"
+      collapsed: true
+      input:
+        use_night_setback:
+          name: Éjszakai visszavétel használata
+          default: false
+          selector:
+            boolean:
+        night_setback_requires_presence:
+          name: Csak akkor váltson, ha valaki otthon van
+          default: true
+          selector:
+            boolean:
+        night_start:
+          name: Lefekvés időpontja
+          default: "22:00:00"
+          selector:
+            time:
+        night_preset:
+          name: Éjszakai preset neve
+          description: A climate entitás egyik preset_mode-ja, pl. "sleep".
+          default: "sleep"
+          selector:
+            text:
+        day_start:
+          name: Ébredés időpontja
+          default: "06:00:00"
+          selector:
+            time:
+        day_preset:
+          name: Nappali preset neve
+          description: >
+            A climate entitás egyik preset_mode-ja, pl. "home". Ezt
+            használja a "Távollét preset" szekció is hazaérkezéskor,
+            ha éppen nappali időszak van.
+          default: "home"
+          selector:
+            text:
+
+    away_section:
+      name: "2. Távollét preset"
+      collapsed: true
+      input:
+        use_away_preset:
+          name: Távollét preset használata
+          default: false
+          selector:
+            boolean:
+        away_delay:
+          name: Késleltetés távozás után
+          description: >
+            Ennyi ideig kell mindenkinek távol lennie, mielőtt a rendszer
+            távollét-módra vált.
+          default:
+            minutes: 30
+          selector:
+            duration:
+        away_preset:
+          name: Távollét preset neve
+          default: "away"
+          selector:
+            text:
+
+    daily_onoff_section:
+      name: "3. Napi be/ki döntés (hiszterézis)"
+      description: >
+        Naponta egyszer eldönti, kell-e egyáltalán fűteni aznap - két
+        hőmérséklet (jellemzően egy kültéri ÉS egy beltéri) alapján,
+        hiszterézissel (a be- és ki-kapcsolási küszöb szándékosan eltér),
+        hogy ne kapcsolgasson feleslegesen napról napra.
+      collapsed: true
+      input:
+        use_daily_on_off:
+          name: Napi be/ki döntés használata
+          default: false
+          selector:
+            boolean:
+        decision_time:
+          name: Döntés időpontja
+          default: "00:10:00"
+          selector:
+            time:
+        daily_outdoor_sensor:
+          name: Kültéri hőmérséklet-szenzor a döntéshez
+          description: >
+            Pl. az előző napi átlaghőmérséklet - szándékosan lehet más
+            szenzor, mint a PID-hangolás élő kültéri szenzora. (Egyet válassz.)
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              multiple: true
+        daily_indoor_sensor:
+          name: Beltéri hőmérséklet-szenzor a döntéshez
+          description: Egyet válassz.
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              multiple: true
+        turn_on_outdoor_below:
+          name: Bekapcsolás küszöb - kültéri (alatta)
+          default: 13
+          selector:
+            number:
+              min: -30
+              max: 40
+              step: 0.5
+              unit_of_measurement: "°C"
+              mode: box
+        turn_on_indoor_below:
+          name: Bekapcsolás küszöb - beltéri (alatta)
+          default: 19
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+              mode: box
+        turn_off_outdoor_above:
+          name: Kikapcsolás küszöb - kültéri (felette)
+          default: 15
+          selector:
+            number:
+              min: -30
+              max: 40
+              step: 0.5
+              unit_of_measurement: "°C"
+              mode: box
+        turn_off_indoor_above:
+          name: Kikapcsolás küszöb - beltéri (felette)
+          default: 23
+          selector:
+            number:
+              min: 0
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+              mode: box
+
+    pid_section:
+      name: "4. Szezonális PID-hangolás (csak Smart Thermostat integrációhoz)"
+      description: >
+        A kültéri hőmérséklet 3 sávja szerint automatikusan átállítja a
+        PID "ki" (integrál) tagját, és törli az addig felhalmozott
+        integrált (smart_thermostat.clear_integral) - enélkül a régi
+        integrál-érték a régi gain-nel "emlékezne", ami túllövéshez
+        vezethet gain-váltás után.
+      collapsed: true
+      input:
+        use_pid_seasonal_tuning:
+          name: Szezonális PID-hangolás használata
+          default: false
+          selector:
+            boolean:
+        pid_outdoor_sensor:
+          name: Élő kültéri hőmérséklet-szenzor
+          description: Egyet válassz.
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              multiple: true
+        pid_stable_for:
+          name: Stabilitási idő a sávváltás előtt
+          description: >
+            Ennyi ideig kell folyamatosan az adott sávban lennie a
+            hőmérsékletnek, mielőtt a rendszer átvált - hogy egy rövid
+            kilengés ne okozzon felesleges gain-váltást.
+          default:
+            hours: 1
+            minutes: 30
+          selector:
+            duration:
+        winter_threshold:
+          name: "Hideg/hűvös határ (°C)"
+          default: 5
+          selector:
+            number:
+              min: -30
+              max: 40
+              step: 0.5
+              unit_of_measurement: "°C"
+              mode: box
+        transitional_upper:
+          name: "Hűvös/enyhe határ (°C)"
+          default: 13
+          selector:
+            number:
+              min: -30
+              max: 40
+              step: 0.5
+              unit_of_measurement: "°C"
+              mode: box
+        ki_winter:
+          name: "PID ki - hideg sáv"
+          description: >
+            A Smart Thermostat "ki" (integrál) gain-je ebben a sávban -
+            tizedesjegyek miatt SZÖVEGKÉNT add meg (pl. "0.00018"), mert a
+            HA szám-selektor "step" mezője 0,001 alatt jelenleg hibásan
+            viselkedik.
+          default: "0.00018"
+          selector:
+            text:
+        ki_transitional:
+          name: "PID ki - hűvös sáv"
+          description: Szövegként add meg, pl. "0.00015" (ld. fenti megjegyzés).
+          default: "0.00015"
+          selector:
+            text:
+        ki_mild:
+          name: "PID ki - enyhe sáv"
+          description: Szövegként add meg, pl. "0.0001" (ld. fenti megjegyzés).
+          default: "0.0001"
+          selector:
+            text:
+        season_select_entity:
+          name: Szezon-kijelző (opcionális, input_select)
+          description: >
+            Ha megadod, ez frissül a sávváltáskor - hasznos egy
+            dashboard-kártyán megjeleníteni, melyik sávban van most a
+            rendszer.
+          default: ""
+          selector:
+            entity:
+              domain: input_select
+        season_winter_label:
+          name: "Kijelzett érték - hideg"
+          default: "Hideg"
+          selector:
+            text:
+        season_transitional_label:
+          name: "Kijelzett érték - hűvös"
+          default: "Hűvös"
+          selector:
+            text:
+        season_mild_label:
+          name: "Kijelzett érték - enyhe"
+          default: "Enyhe"
+          selector:
+            text:
+
+    watchdog_section:
+      name: "5. Kazán-/hőtermelő-felügyelet"
+      description: >
+        Riaszt, ha a fűtés hosszú ideje folyamatosan megy, de a beltéri
+        hőmérséklet nem emelkedik - ez tényleges hőtermelési hibára utal
+        (nem csak arra, hogy a fűtés "kérve van", hanem hogy nem termel
+        hőt).
+      collapsed: true
+      input:
+        use_boiler_watchdog:
+          name: Felügyelet használata
+          default: false
+          selector:
+            boolean:
+        actual_heating_sensor:
+          name: '"Ténylegesen fűt" binary_sensor'
+          description: >
+            Egy binary_sensor, ami akkor "on", ha a hőtermelő ténylegesen
+            termel (pl. relé zárva ÉS fogyasztás egy küszöb fölött) - NE
+            magát a climate/hívás-jelet add meg, mert az csak azt jelzi,
+            hogy a rendszer "kéri" a hőt, nem hogy ténylegesen termel-e.
+            A csomagban: binary_sensor.kazan_tenylegesen_fut. (Egyet válassz.)
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+        temp_trend_sensor:
+          name: Beltéri hőmérséklet-trend szenzor
+          description: >
+            Egy derivative-szenzor (°C/óra) a beltéri hőmérsékletről.
+            A csomagban: sensor.futes_benti_trend. (Egyet válassz.)
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              multiple: true
+        stall_duration:
+          name: Riasztási időtartam
+          description: Ennyi ideig kell folyamatosan fűtenie, mielőtt riaszt.
+          default:
+            minutes: 45
+          selector:
+            duration:
+        trend_alert_below:
+          name: "Riasztási trend-küszöb (°C/óra)"
+          description: Riaszt, ha a trend ez alatt van (pl. 0 = nem emelkedik).
+          default: 0
+          selector:
+            number:
+              min: -10
+              max: 10
+              step: 0.1
+              mode: box
+        notify_service:
+          name: Notify szolgáltatás
+          description: Pl. "notify.mobile_app_telefonom" (üres = csak HA-értesítés).
+          default: ""
+          selector:
+            text:
+        fault_flag:
+          name: Hibajelző (opcionális input_boolean)
+          description: >
+            Riasztáskor bekapcsolja (pl. input_boolean.kazan_hiba - a
+            termosztát-kártya villogó piros ikonnal jelzi), és magától
+            kikapcsolja, ha a beltéri hőmérséklet újra tartósan emelkedik.
+          default: []
+          selector:
+            entity:
+              domain: input_boolean
+              multiple: true
+        recover_duration:
+          name: Helyreállás időtartama
+          description: >
+            Ennyi ideig kell a trendnek a riasztási küszöb fölött lennie,
+            hogy a hibajelző magától kikapcsoljon.
+          default:
+            minutes: 30
+          selector:
+            duration:
+
+    window_section:
+      name: "6. Ablak/ajtó-figyelembevétel (opcionális)"
+      description: >
+        NEM kapcsolja ki a fűtést (arra ld. a fenti, külön közösségi
+        blueprint-et) - csak elnémítja a kazán-/hőtermelő-felügyelet
+        (5. pont) riasztását, amíg valamelyik megadott érzékelő nyitva
+        van, hogy egy legitim, ablak miatti hőveszteséget ne nézzen
+        tévesen hőtermelési hibának.
+      collapsed: true
+      input:
+        window_door_sensors:
+          name: Ablak/ajtó nyitásérzékelők
+          description: >
+            Egy vagy több binary_sensor - a te saját, explicit listád,
+            nem függ egy máshol (pl. HA group helperben) esetleg
+            hiányosan definiált gyűjtőtől.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+        suppress_watchdog_when_open:
+          name: Riasztás elnémítása nyitott ablaknál
+          default: true
+          selector:
+            boolean:
+
+mode: queued
+max_exceeded: silent
+
+triggers:
+  - id: night_setback_night
+    trigger: time
+    at: !input night_start
+  - id: night_setback_day
+    trigger: time
+    at: !input day_start
+  - id: away_left
+    trigger: state
+    entity_id: !input person_entities
+    from: "home"
+    for: !input away_delay
+  - id: away_home
+    trigger: state
+    entity_id: !input person_entities
+    to: "home"
+  - id: daily_decision
+    trigger: time
+    at: !input decision_time
+  - id: pid_winter
+    trigger: numeric_state
+    entity_id: !input pid_outdoor_sensor
+    below: !input winter_threshold
+    for: !input pid_stable_for
+  - id: pid_transitional
+    trigger: numeric_state
+    entity_id: !input pid_outdoor_sensor
+    above: !input winter_threshold
+    below: !input transitional_upper
+    for: !input pid_stable_for
+  - id: pid_mild
+    trigger: numeric_state
+    entity_id: !input pid_outdoor_sensor
+    above: !input transitional_upper
+    for: !input pid_stable_for
+  - id: boiler_watchdog
+    trigger: state
+    entity_id: !input actual_heating_sensor
+    to: "on"
+    for: !input stall_duration
+  - id: boiler_recover
+    trigger: numeric_state
+    entity_id: !input temp_trend_sensor
+    above: !input trend_alert_below
+    for: !input recover_duration
+  - id: startup
+    trigger: homeassistant
+    event: start
+
+conditions:
+  - condition: state
+    entity_id: !input master_enable
+    state: "on"
+
+variables:
+  climate_entity: !input climate_entity
+  persons: !input person_entities
+  use_night_setback: !input use_night_setback
+  night_requires_presence: !input night_setback_requires_presence
+  night_start_v: !input night_start
+  day_start_v: !input day_start
+  night_preset: !input night_preset
+  day_preset: !input day_preset
+  use_away_preset: !input use_away_preset
+  away_preset: !input away_preset
+  use_daily_on_off: !input use_daily_on_off
+  daily_outdoor_list: !input daily_outdoor_sensor
+  daily_indoor_list: !input daily_indoor_sensor
+  daily_outdoor_sensor: "{{ daily_outdoor_list | first if daily_outdoor_list else '' }}"
+  daily_indoor_sensor: "{{ daily_indoor_list | first if daily_indoor_list else '' }}"
+  turn_on_outdoor_below: !input turn_on_outdoor_below
+  turn_on_indoor_below: !input turn_on_indoor_below
+  turn_off_outdoor_above: !input turn_off_outdoor_above
+  turn_off_indoor_above: !input turn_off_indoor_above
+  use_pid_seasonal_tuning: !input use_pid_seasonal_tuning
+  pid_outdoor_list: !input pid_outdoor_sensor
+  pid_outdoor_sensor: "{{ pid_outdoor_list | first if pid_outdoor_list else '' }}"
+  winter_threshold: !input winter_threshold
+  transitional_upper: !input transitional_upper
+  ki_winter: !input ki_winter
+  ki_transitional: !input ki_transitional
+  ki_mild: !input ki_mild
+  season_select_entity: !input season_select_entity
+  season_winter_label: !input season_winter_label
+  season_transitional_label: !input season_transitional_label
+  season_mild_label: !input season_mild_label
+  use_boiler_watchdog: !input use_boiler_watchdog
+  trend_list: !input temp_trend_sensor
+  temp_trend_sensor: "{{ trend_list | first if trend_list else '' }}"
+  trend_alert_below: !input trend_alert_below
+  notify_svc: !input notify_service
+  fault_flags: !input fault_flag
+  window_door_sensors: !input window_door_sensors
+  suppress_watchdog_when_open: !input suppress_watchdog_when_open
+  any_window_open: >
+    {{ window_door_sensors | count > 0 and
+       (window_door_sensors | select('is_state', 'on') | list | count > 0) }}
+  anyone_home: >
+    {{ persons | select('is_state', 'home') | list | count > 0 }}
+  all_away: >
+    {{ persons | count > 0 and not anyone_home }}
+  in_night_window: >
+    {% set n = now().strftime('%H:%M:%S') %}
+    {{ (n >= night_start_v or n < day_start_v) if night_start_v > day_start_v
+       else (night_start_v <= n < day_start_v) }}
+
+actions:
+  - choose:
+      # 1. ÉJSZAKAI VISSZAVÉTEL
+      - conditions:
+          - "{{ trigger.id in ['night_setback_night', 'night_setback_day'] }}"
+          - "{{ use_night_setback }}"
+          - "{{ not night_requires_presence or anyone_home }}"
+        sequence:
+          - action: climate.set_preset_mode
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              preset_mode: "{{ night_preset if trigger.id == 'night_setback_night' else day_preset }}"
+
+      # 2. TÁVOLLÉT PRESET (a zóna is távollét: 'home'-ból bármi másba lépés számít)
+      - conditions:
+          - "{{ trigger.id == 'away_left' }}"
+          - "{{ use_away_preset }}"
+          - "{{ all_away }}"
+        sequence:
+          - action: climate.set_preset_mode
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              preset_mode: "{{ away_preset }}"
+      - conditions:
+          - "{{ trigger.id == 'away_home' }}"
+          - "{{ use_away_preset }}"
+        sequence:
+          - action: climate.set_preset_mode
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              preset_mode: "{{ night_preset if (use_night_setback and in_night_window) else day_preset }}"
+
+      # 3. NAPI BE/KI DÖNTÉS (hiszterézissel; induláskor is, a kimaradt döntés pótlására)
+      - conditions:
+          - "{{ trigger.id in ['daily_decision', 'startup'] }}"
+          - "{{ use_daily_on_off and daily_outdoor_sensor != '' and daily_indoor_sensor != '' }}"
+        sequence:
+          - if: "{{ trigger.id == 'startup' }}"
+            then:
+              - delay:
+                  seconds: 30
+          - variables:
+              t_out: "{{ states(daily_outdoor_sensor) | float(none) }}"
+              t_in: "{{ states(daily_indoor_sensor) | float(none) }}"
+          - choose:
+              - conditions:
+                  - "{{ t_out is number and t_in is number }}"
+                  - "{{ t_out < turn_on_outdoor_below and t_in < turn_on_indoor_below }}"
+                  - "{{ is_state(climate_entity, 'off') }}"
+                sequence:
+                  - action: climate.turn_on
+                    target:
+                      entity_id: "{{ climate_entity }}"
+              - conditions:
+                  - "{{ t_out is number and t_in is number }}"
+                  - "{{ t_out > turn_off_outdoor_above and t_in > turn_off_indoor_above }}"
+                  - "{{ not is_state(climate_entity, 'off') }}"
+                sequence:
+                  - action: climate.turn_off
+                    target:
+                      entity_id: "{{ climate_entity }}"
+
+  # 4. SZEZONÁLIS PID-HANGOLÁS (induláskor is, az aktuális kinti hőmérséklet szerint)
+  - if:
+      - "{{ trigger.id in ['pid_winter', 'pid_transitional', 'pid_mild', 'startup'] }}"
+      - "{{ use_pid_seasonal_tuning and pid_outdoor_sensor != '' }}"
+    then:
+      - if: "{{ trigger.id == 'startup' }}"
+        then:
+          - delay:
+              seconds: 30
+          - if: "{{ not (states(pid_outdoor_sensor) | is_number) }}"
+            then:
+              - stop: "A kültéri szenzor még nem elérhető induláskor; a következő sávváltáskor frissül."
+      - variables:
+          current_band: >
+            {% if trigger.id == 'startup' %}
+              {% set t = states(pid_outdoor_sensor) | float %}
+              {{ 'pid_winter' if t < winter_threshold else ('pid_transitional' if t < transitional_upper else 'pid_mild') }}
+            {% else %}{{ trigger.id }}{% endif %}
+          new_ki: >
+            {{ ({'pid_winter': ki_winter, 'pid_transitional': ki_transitional, 'pid_mild': ki_mild}[current_band] | string).replace(',', '.') | float }}
+          new_label: >
+            {{ {'pid_winter': season_winter_label, 'pid_transitional': season_transitional_label, 'pid_mild': season_mild_label}[current_band] }}
+      - action: smart_thermostat.set_pid_gain
+        data:
+          entity_id: "{{ climate_entity }}"
+          ki: "{{ new_ki }}"
+      - action: smart_thermostat.clear_integral
+        target:
+          entity_id: "{{ climate_entity }}"
+      - if: "{{ season_select_entity not in ['', none] }}"
+        then:
+          - action: input_select.select_option
+            target:
+              entity_id: "{{ season_select_entity }}"
+            data:
+              option: "{{ new_label }}"
+
+  # 5. KAZÁN-/HŐTERMELŐ-FELÜGYELET (+ 6. ablak/ajtó: nyitott ablaknál nem riaszt)
+  - choose:
+      - conditions:
+          - "{{ trigger.id == 'boiler_watchdog' }}"
+          - "{{ use_boiler_watchdog and temp_trend_sensor != '' }}"
+          - "{{ not (suppress_watchdog_when_open and any_window_open) }}"
+          - "{{ states(temp_trend_sensor) | is_number and states(temp_trend_sensor) | float < trend_alert_below | float }}"
+        sequence:
+          - if: "{{ fault_flags | count > 0 }}"
+            then:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: "{{ fault_flags }}"
+          - if: "{{ notify_svc not in ['', none] }}"
+            then:
+              - action: "{{ notify_svc }}"
+                continue_on_error: true
+                data:
+                  title: "⚠️ Hőtermelési hiba gyanú"
+                  message: >
+                    A fűtés hosszú ideje folyamatosan megy, de a beltéri
+                    hőmérséklet nem emelkedik (trend: {{ states(temp_trend_sensor) }} °C/óra).
+                    Ellenőrizd a kazánt / hőtermelőt!
+          - action: persistent_notification.create
+            data:
+              title: "Hőtermelési hiba gyanú"
+              message: >
+                A fűtés hosszú ideje folyamatosan megy, de a beltéri hőmérséklet
+                nem emelkedik (trend: {{ states(temp_trend_sensor) }} °C/óra,
+                {{ now().strftime('%Y-%m-%d %H:%M') }}).
+      - conditions:
+          - "{{ trigger.id == 'boiler_recover' }}"
+          - "{{ fault_flags | select('is_state', 'on') | list | count > 0 }}"
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: "{{ fault_flags }}"

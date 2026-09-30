@@ -1,0 +1,120 @@
+blueprint:
+  name: "Jelenlét alapú fűtés/klíma preset (Otthon / Távol / Szabadság)"
+  description: >
+    A háztartás-jelenlét szenzor (Otthon / Távol / Szabadság – a
+    hu_futes_jelenlet.yaml csomagból) alapján állítja egy vagy több termosztát
+    preset-jét:
+
+    - Távol (a megadott késleltetés után): távollét preset (pl. away);
+    - Szabadság (hosszú távollét, alapból 12 óra után): szabadság preset (pl. eco);
+    - hazaérkezéskor (Otthon): éjszakai időszakban az éjszakai, egyébként a
+      nappali preset.
+
+    A zóna (pl. „Munkahely”) is távollétnek számít, nem csak a „not_home”.
+    Termosztátonként egy példányt hozz létre (pl. fűtés, klíma), saját
+    presetekkel. Forrás: https://github.com/Gyuszko55/ha-futes-hu
+  domain: automation
+  author: Gyuszko55 (Claude segítségével)
+  source_url: https://github.com/Gyuszko55/ha-futes-hu/blob/main/blueprints/automation/hu_futes/jelenlet_preset.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    presence_entity:
+      name: Háztartás-jelenlét szenzor
+      description: Állapotai „Otthon”, „Távol”, „Szabadság” (a csomagban sensor.haztartas_jelenlet).
+      default: sensor.haztartas_jelenlet
+      selector:
+        entity:
+          domain: sensor
+    climate_entity:
+      name: Termosztát
+      selector:
+        entity:
+          domain: climate
+    enable_entity:
+      name: Engedélyező kapcsoló (opcionális)
+      description: Ha megadod, csak akkor vált, ha ez be van kapcsolva (pl. input_boolean.futes_auto).
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+          multiple: true
+    away_delay:
+      name: Késleltetés a Távol preset előtt
+      default:
+        minutes: 30
+      selector:
+        duration:
+    away_preset:
+      name: Távol preset
+      default: away
+      selector:
+        text:
+    vacation_preset:
+      name: Szabadság preset
+      default: eco
+      selector:
+        text:
+    day_preset:
+      name: Nappali preset (hazaérkezéskor)
+      default: home
+      selector:
+        text:
+    night_preset:
+      name: Éjszakai preset (hazaérkezéskor éjjel)
+      default: sleep
+      selector:
+        text:
+    night_start:
+      name: Éjszaka kezdete
+      default: "22:00:00"
+      selector:
+        time:
+    day_start:
+      name: Nappal kezdete
+      default: "06:00:00"
+      selector:
+        time:
+
+mode: queued
+
+triggers:
+  - trigger: state
+    entity_id: !input presence_entity
+    to: "Távol"
+    for: !input away_delay
+    id: tavol
+  - trigger: state
+    entity_id: !input presence_entity
+    to: "Szabadság"
+    id: szabadsag
+  - trigger: state
+    entity_id: !input presence_entity
+    to: "Otthon"
+    from: ["Távol", "Szabadság"]
+    id: otthon
+
+variables:
+  enable_list: !input enable_entity
+  night_start_v: !input night_start
+  day_start_v: !input day_start
+  away_p: !input away_preset
+  vac_p: !input vacation_preset
+  day_p: !input day_preset
+  night_p: !input night_preset
+  ejszaka: >
+    {% set n = now().strftime('%H:%M:%S') %}
+    {{ (n >= night_start_v or n < day_start_v) if night_start_v > day_start_v
+       else (night_start_v <= n < day_start_v) }}
+  preset: >
+    {{ {'tavol': away_p, 'szabadsag': vac_p}.get(trigger.id, night_p if ejszaka else day_p) }}
+
+conditions:
+  - "{{ enable_list | count == 0 or enable_list | select('is_state', 'on') | list | count == enable_list | count }}"
+
+actions:
+  - action: climate.set_preset_mode
+    target:
+      entity_id: !input climate_entity
+    data:
+      preset_mode: "{{ preset }}"

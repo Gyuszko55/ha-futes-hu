@@ -1,0 +1,53 @@
+# Kártya-példák (Irányítópult → Kártya hozzáadása → Kézi kártya / YAML).
+# Előfeltétel: HACS → „Better Thermostat UI” kártya, és a hu-termosztat.js erőforrás (lásd README).
+
+# --- Fűtés, minden kiegészítővel -------------------------------------------------
+type: custom:hu-futes-card
+entity: climate.futes                       # a termosztát (kötelező)
+name: Fűtés
+opening:
+  sensor: binary_sensor.ablakok_ajtok       # ablak/ajtó érzékelő vagy csoport (csoportnál a tagokat név szerint írja)
+  name: Ablak/ajtó
+  delay: 60                                 # ennyi mp után áll le a fűtés (az ablak-blueprintben beállított érték)
+humidity_sensor: sensor.nappali_paratartalom
+outdoor_entity: sensor.kulso_homerseklet    # a tárcsában, a benti hőmérséklet előtt
+# A csomag (hu_futes_kazan.yaml) entitásai az alapértékek – ha azt használod, ezeket nem kell megadni:
+# burning_entity: binary_sensor.kazan_tenylegesen_fut
+# fault_entity: input_boolean.kazan_hiba
+# season_entity: input_select.futes_evszak
+# runtime_entity: sensor.kazan_futesi_ido
+# gas_entity: sensor.kazan_gaz_napi
+# auto_entity: input_boolean.futes_auto
+# presence_entity: sensor.haztartas_jelenlet
+gas_yearly_entity: sensor.kazan_gaz_osszesen   # vagy egy éves gáz-szenzor
+decide:                                     # a blueprint 3. szekciójával azonos küszöbök
+  entity: sensor.tegnapi_atlaghomerseklet
+  indoor_entity: sensor.nappali_homerseklet
+  time: "00:10"
+  on_below: 13
+  indoor_on_below: 19
+watch_sensors:                              # elem- és elérhetőség-figyelés
+  - sensor.nappali_homerseklet
+  - sensor.kulso_homerseklet
+schedule:                                   # az automatika-sor szövegéhez (a blueprint beállításai szerint)
+  night_start: "22:00"
+  night_preset: sleep
+  day_start: "06:00"
+  day_preset: home
+  away_preset: away
+  away_delay_min: 30
+  vacation_preset: eco
+
+# --- Fűtés, minimálisan ------------------------------------------------------------
+# type: custom:hu-futes-card
+# entity: climate.futes
+
+# --- Klíma (Better Thermostat) ----------------------------------------------------
+# type: custom:hu-klima-card
+# entity: climate.bt_klima
+# name: Klíma
+# opening: { sensor: binary_sensor.teraszajto, name: Teraszajtó, delay: 60 }
+# unit_entity: climate.klima_gyari        # a klíma saját entitása (belső hőmérője a tárcsában)
+# power_entity: sensor.klima_teljesitmeny
+# auto_entity: input_boolean.klima_auto
+# schedule: { day_preset: eco, vacation_preset: away }

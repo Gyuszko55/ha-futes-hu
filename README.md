@@ -30,6 +30,7 @@ Egy valós, gázkazános, radiátoros otthoni fűtésrendszerből általánosít
 | 5 | **Egy termosztát (`climate`) presetekkel**: | | igen |
 |   | – [Smart Thermostat (PID)](https://github.com/ScratMan/HASmartThermostat) (ajánlott, a PID-hangoláshoz ez kell) | HACS → Integrációk → „Smart Thermostat (PID)” → Letöltés → újraindítás → YAML-beállítás: [docs/pelda_smart_thermostat.yaml](docs/pelda_smart_thermostat.yaml) | |
 |   | – vagy a beépített `generic_thermostat` presetekkel | configuration.yaml | |
+|   | – vagy **preset nélküli termosztát** (pl. Honeywell Lyric T6, HomeKit-es termosztátok, Zigbee-fejek): a blueprintekben a „Célhőmérséklet” vezérlési mód – lásd lent | a termosztát integrációja | |
 | 6 | **[HACS](https://hacs.xyz/)** | https://hacs.xyz/docs/use/ | a 5. és 7. ponthoz |
 | 7 | **Better Thermostat UI** kártya | HACS → Frontend → „Better Thermostat UI” → Letöltés | a kártyához |
 | 8 | **Teljesítménymérő a kazánon** (pl. Shelly Plug) | a mérő integrációja | nem. Ha van, a „tényleges fűtés” pontosabb. |
@@ -102,6 +103,11 @@ Létrejövő entitások:
 - **PID-hangoláshoz:** szezon-kijelző `input_select.futes_evszak`. A sávok nevei: Hideg / Hűvös / Enyhe.
 
 **Jelenlét alapú preset:** termosztátonként egy példány, engedélyezőnek pl. `input_boolean.futes_auto`. Ha ezt használod, a Fűtésvezérlés 2. szekcióját (távollét) hagyd kikapcsolva.
+
+**Preset nélküli termosztát (pl. Honeywell Lyric T6):** mindkét blueprintben a *Vezérlés módja* → **Célhőmérséklet**. Ekkor a blueprint a nappali / éjszakai / távolléti (és szabadság) hőmérsékletet állítja (`climate.set_temperature`) a preset-váltás helyett.
+- A Lyric T6 a **Honeywell Lyric** integrációval (felhő) vagy – mivel Apple HomeKit-képes – a **HomeKit-eszköz** integrációval (helyi) kerül a HA-ba.
+- A Lyric integráció presetjei nem hőmérséklet-profilok, hanem az ütemezés tartási módjai. Hogy a termosztát saját ütemezése a következő ütemezési időpontban ne írja felül a beállított hőmérsékletet, a *Tartás preset* mezőbe add meg a tartó presetet (pl. `PermanentHold` – a pontos nevet lásd: Fejlesztői eszközök → Állapotok → a `climate` entitás `preset_modes` attribútuma). HomeKit-en át nincs preset: ott a termosztát saját ütemezését kapcsold ki a Lyric alkalmazásban.
+- A PID-hangolás (4. szekció) Smart Thermostat-specifikus, Lyricnél hagyd kikapcsolva.
 
 ### 4. Kártya
 

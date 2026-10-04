@@ -7,7 +7,8 @@ blueprint:
     FÜGGETLEN, egyenként ki/bekapcsolható szekció - csak azokat aktiváld,
     amikre szükséged van:
 
-    1. ÉJSZAKAI VISSZAVÉTEL - esti/reggeli preset-váltás időzítve.
+    1. ÉJSZAKAI VISSZAVÉTEL - esti/reggeli preset- (vagy célhőmérséklet-)
+    váltás időzítve.
     2. TÁVOLLÉT PRESET - ha a megadott személyek közül senki sincs
     otthon (zónában is távollétnek számít), alacsonyabb hőfokra vált;
     hazaérkezéskor napszaktól függően áll vissza. (Háromállapotú
@@ -39,9 +40,12 @@ blueprint:
     (pl. egy HA group helperben) definiált gyűjtőtől.
 
     ELŐFELTÉTELEK:
-    - A megadott climate entitásnak legyen `preset_mode` támogatása a
-      használt preset-nevekkel (pl. Smart Thermostat, generic_thermostat
-      presetekkel, vagy bármi más ilyen climate integráció).
+    - Preset módban: a megadott climate entitásnak legyen `preset_mode`
+      támogatása a használt preset-nevekkel (pl. Smart Thermostat,
+      generic_thermostat presetekkel). Preset nélküli termosztátnál
+      (pl. Honeywell Lyric T6, HomeKit-es termosztátok) válaszd a
+      „Célhőmérséklet” vezérlési módot: ekkor az éjszakai visszavétel és a
+      távollét célhőmérsékletet állít (climate.set_temperature).
     - A szezonális PID-hangoláshoz a climate entitás integrációjának
       támogatnia kell a `smart_thermostat.set_pid_gain` és
       `smart_thermostat.clear_integral` szolgáltatásokat (ez a "Smart
@@ -85,6 +89,50 @@ blueprint:
         entity:
           domain: person
           multiple: true
+
+    control_section:
+      name: "Vezérlés módja: preset vagy célhőmérséklet"
+      description: >
+        Preset: a termosztát preset_mode-jait váltja (Smart Thermostat, generic_thermostat stb.).
+        Célhőmérséklet: preset nélküli termosztátnál (pl. Honeywell Lyric T6, HomeKit-es termosztátok, sok
+        Zigbee-fej) a nappali/éjszakai/távolléti hőmérsékletet állítja (climate.set_temperature).
+      collapsed: true
+      input:
+        control_mode:
+          name: Vezérlés módja
+          default: preset
+          selector:
+            select:
+              options:
+                - label: Preset (preset_mode)
+                  value: preset
+                - label: Célhőmérséklet (set_temperature)
+                  value: temperature
+        day_temp:
+          name: Nappali hőmérséklet (célhőmérséklet módban)
+          default: 21
+          selector:
+            number: {min: 5, max: 30, step: 0.5, unit_of_measurement: "°C", mode: box}
+        night_temp:
+          name: Éjszakai hőmérséklet (célhőmérséklet módban)
+          default: 18.5
+          selector:
+            number: {min: 5, max: 30, step: 0.5, unit_of_measurement: "°C", mode: box}
+        away_temp:
+          name: Távolléti hőmérséklet (célhőmérséklet módban)
+          default: 17
+          selector:
+            number: {min: 5, max: 30, step: 0.5, unit_of_measurement: "°C", mode: box}
+        hold_preset:
+          name: Tartás preset a hőmérséklet előtt (opcionális)
+          description: >
+            Ha a termosztát saját ütemezése a következő időpontban felülírná a beállított hőmérsékletet, itt
+            adható meg az a preset, amely a hőmérsékletet megtartja – pl. Honeywell Lyric integrációnál
+            „PermanentHold” (a pontos nevet lásd: Fejlesztői eszközök → Állapotok → a climate entitás
+            preset_modes attribútuma). Üresen: csak a hőmérsékletet állítja.
+          default: ""
+          selector:
+            text:
 
     schedule_section:
       name: "1. Éjszakai visszavétel"
@@ -506,6 +554,16 @@ variables:
   day_preset: !input day_preset
   use_away_preset: !input use_away_preset
   away_preset: !input away_preset
+  control_mode: !input control_mode
+  temps:
+    day: !input day_temp
+    night: !input night_temp
+    away: !input away_temp
+  hold_preset: !input hold_preset
+  presets:
+    day: "{{ day_preset }}"
+    night: "{{ night_preset }}"
+    away: "{{ away_preset }}"
   use_daily_on_off: !input use_daily_on_off
   daily_outdoor_list: !input daily_outdoor_sensor
   daily_indoor_list: !input daily_indoor_sensor
@@ -555,11 +613,29 @@ actions:
           - "{{ use_night_setback }}"
           - "{{ not night_requires_presence or anyone_home }}"
         sequence:
-          - action: climate.set_preset_mode
-            target:
-              entity_id: "{{ climate_entity }}"
-            data:
-              preset_mode: "{{ night_preset if trigger.id == 'night_setback_night' else day_preset }}"
+          - variables:
+              cel: "{{ 'night' if trigger.id == 'night_setback_night' else 'day' }}"
+          - if: "{{ control_mode == 'temperature' }}"
+            then:
+              - if: "{{ hold_preset | trim != '' }}"
+                then:
+                  - action: climate.set_preset_mode
+                    target:
+                      entity_id: "{{ climate_entity }}"
+                    data:
+                      preset_mode: "{{ hold_preset | trim }}"
+                    continue_on_error: true
+              - action: climate.set_temperature
+                target:
+                  entity_id: "{{ climate_entity }}"
+                data:
+                  temperature: "{{ temps[cel] | float }}"
+            else:
+              - action: climate.set_preset_mode
+                target:
+                  entity_id: "{{ climate_entity }}"
+                data:
+                  preset_mode: "{{ presets[cel] }}"
 
       # 2. TÁVOLLÉT PRESET (a zóna is távollét: 'home'-ból bármi másba lépés számít)
       - conditions:
@@ -567,20 +643,56 @@ actions:
           - "{{ use_away_preset }}"
           - "{{ all_away }}"
         sequence:
-          - action: climate.set_preset_mode
-            target:
-              entity_id: "{{ climate_entity }}"
-            data:
-              preset_mode: "{{ away_preset }}"
+          - variables:
+              cel: "away"
+          - if: "{{ control_mode == 'temperature' }}"
+            then:
+              - if: "{{ hold_preset | trim != '' }}"
+                then:
+                  - action: climate.set_preset_mode
+                    target:
+                      entity_id: "{{ climate_entity }}"
+                    data:
+                      preset_mode: "{{ hold_preset | trim }}"
+                    continue_on_error: true
+              - action: climate.set_temperature
+                target:
+                  entity_id: "{{ climate_entity }}"
+                data:
+                  temperature: "{{ temps[cel] | float }}"
+            else:
+              - action: climate.set_preset_mode
+                target:
+                  entity_id: "{{ climate_entity }}"
+                data:
+                  preset_mode: "{{ presets[cel] }}"
       - conditions:
           - "{{ trigger.id == 'away_home' }}"
           - "{{ use_away_preset }}"
         sequence:
-          - action: climate.set_preset_mode
-            target:
-              entity_id: "{{ climate_entity }}"
-            data:
-              preset_mode: "{{ night_preset if (use_night_setback and in_night_window) else day_preset }}"
+          - variables:
+              cel: "{{ 'night' if (use_night_setback and in_night_window) else 'day' }}"
+          - if: "{{ control_mode == 'temperature' }}"
+            then:
+              - if: "{{ hold_preset | trim != '' }}"
+                then:
+                  - action: climate.set_preset_mode
+                    target:
+                      entity_id: "{{ climate_entity }}"
+                    data:
+                      preset_mode: "{{ hold_preset | trim }}"
+                    continue_on_error: true
+              - action: climate.set_temperature
+                target:
+                  entity_id: "{{ climate_entity }}"
+                data:
+                  temperature: "{{ temps[cel] | float }}"
+            else:
+              - action: climate.set_preset_mode
+                target:
+                  entity_id: "{{ climate_entity }}"
+                data:
+                  preset_mode: "{{ presets[cel] }}"
 
       # 3. NAPI BE/KI DÖNTÉS (hiszterézissel; induláskor is, a kimaradt döntés pótlására)
       - conditions:

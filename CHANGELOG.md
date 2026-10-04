@@ -1,5 +1,13 @@
 # Változások
 
+## 1.1.0 – 2026-10-04
+
+- **Célhőmérséklet vezérlési mód** mindkét blueprintben: preset nélküli termosztátoknál (pl. Honeywell Lyric T6,
+  HomeKit-es termosztátok, Zigbee-fejek) a nappali / éjszakai / távolléti / szabadság hőmérsékletet állítja
+  (`climate.set_temperature`) a preset-váltás helyett. Opcionális *Tartás preset* (pl. Lyric: `PermanentHold`), hogy
+  a termosztát saját ütemezése ne írja felül. Az alapértelmezés (preset mód) nem változott – a meglévő példányok
+  változatlanul működnek.
+
 ## 1.0.0 – 2026-09-30
 
 Első kiadás:

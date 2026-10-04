@@ -65,6 +65,48 @@ blueprint:
       default: sleep
       selector:
         text:
+    control_mode:
+      name: Vezérlés módja
+      description: >
+        Preset: a termosztát preset_mode-jait váltja. Célhőmérséklet: preset nélküli termosztátnál (pl. Honeywell
+        Lyric T6, HomeKit-es termosztátok) az alábbi hőmérsékleteket állítja (climate.set_temperature).
+      default: preset
+      selector:
+        select:
+          options:
+            - label: Preset (preset_mode)
+              value: preset
+            - label: Célhőmérséklet (set_temperature)
+              value: temperature
+    day_temp:
+      name: Nappali hőmérséklet (célhőmérséklet módban)
+      default: 21
+      selector:
+        number: {min: 5, max: 30, step: 0.5, unit_of_measurement: "°C", mode: box}
+    night_temp:
+      name: Éjszakai hőmérséklet (célhőmérséklet módban)
+      default: 18.5
+      selector:
+        number: {min: 5, max: 30, step: 0.5, unit_of_measurement: "°C", mode: box}
+    away_temp:
+      name: Távol hőmérséklet (célhőmérséklet módban)
+      default: 17
+      selector:
+        number: {min: 5, max: 30, step: 0.5, unit_of_measurement: "°C", mode: box}
+    vacation_temp:
+      name: Szabadság hőmérséklet (célhőmérséklet módban)
+      default: 15
+      selector:
+        number: {min: 5, max: 30, step: 0.5, unit_of_measurement: "°C", mode: box}
+    hold_preset:
+      name: Tartás preset a hőmérséklet előtt (opcionális)
+      description: >
+        Ha a termosztát saját ütemezése felülírná a beállított hőmérsékletet: az a preset, amely megtartja – pl.
+        Honeywell Lyric integrációnál „PermanentHold” (a pontos nevet lásd a climate entitás preset_modes
+        attribútumában). Üresen: csak a hőmérsékletet állítja.
+      default: ""
+      selector:
+        text:
     night_start:
       name: Éjszaka kezdete
       default: "22:00:00"
@@ -108,13 +150,37 @@ variables:
        else (night_start_v <= n < day_start_v) }}
   preset: >
     {{ {'tavol': away_p, 'szabadsag': vac_p}.get(trigger.id, night_p if ejszaka else day_p) }}
+  control_mode: !input control_mode
+  hold_preset: !input hold_preset
+  t_day: !input day_temp
+  t_night: !input night_temp
+  t_away: !input away_temp
+  t_vac: !input vacation_temp
+  homerseklet: >
+    {{ {'tavol': t_away, 'szabadsag': t_vac}.get(trigger.id, t_night if ejszaka else t_day) }}
 
 conditions:
   - "{{ enable_list | count == 0 or enable_list | select('is_state', 'on') | list | count == enable_list | count }}"
 
 actions:
-  - action: climate.set_preset_mode
-    target:
-      entity_id: !input climate_entity
-    data:
-      preset_mode: "{{ preset }}"
+  - if: "{{ control_mode == 'temperature' }}"
+    then:
+      - if: "{{ hold_preset | trim != '' }}"
+        then:
+          - action: climate.set_preset_mode
+            target:
+              entity_id: !input climate_entity
+            data:
+              preset_mode: "{{ hold_preset | trim }}"
+            continue_on_error: true
+      - action: climate.set_temperature
+        target:
+          entity_id: !input climate_entity
+        data:
+          temperature: "{{ homerseklet | float }}"
+    else:
+      - action: climate.set_preset_mode
+        target:
+          entity_id: !input climate_entity
+        data:
+          preset_mode: "{{ preset }}"

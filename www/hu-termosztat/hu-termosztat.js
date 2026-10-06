@@ -57,7 +57,7 @@ const MORE_MENU = [
   ["settings", "mdi:cog-outline", "Beállítások"],
   ["related", "mdi:family-tree", "Kapcsolódó"],
 ];
-const VERSION = "1.0";
+const VERSION = "1.1";
 
 const PRESET_HU = {
   none: "Nincs", eco: "Takarékos", away: "Távol", comfort: "Kényelmes",
@@ -197,6 +197,7 @@ class HuThermoCard extends HTMLElement {
         <div class="title"></div>
         <div class="banner-slot"></div>
         <div class="bt"></div>
+        <div class="preset-text"></div>
         <div class="chips"></div>
         <div class="auto"></div>
         <div class="menu" hidden></div>
@@ -207,6 +208,7 @@ class HuThermoCard extends HTMLElement {
       banner: root.querySelector(".banner-slot"),
       bt: root.querySelector(".bt"),
       chips: root.querySelector(".chips"),
+      presetText: root.querySelector(".preset-text"),
       auto: root.querySelector(".auto"),
       menu: root.querySelector(".menu"),
     };
@@ -331,6 +333,7 @@ class HuThermoCard extends HTMLElement {
     const st = ctx.st;
     this._el.title.textContent = this._config.name || st?.attributes?.friendly_name || this._config.entity;
     this._el.banner.innerHTML = st ? this._banner(ctx) : `<div class="banner warn"><span>Nem található: ${esc(this._config.entity)}</span></div>`;
+    this._el.presetText.innerHTML = this._config.preset_text && st ? this._presetText(ctx) : "";
     this._el.chips.classList.toggle("plain", !!this._config.plain_chips);
     this._el.chips.innerHTML = this._chips(ctx).join("");
     this._el.auto.innerHTML = this._autoRow(ctx);
@@ -433,6 +436,28 @@ class HuThermoCard extends HTMLElement {
     const name = PRESET_HU[key] ?? key;
     const t = num(st?.attributes?.[`${key}_temp`]);
     return t != null ? `${name} ${fmt(t)} °C` : name;
+  }
+
+  /** A tárcsa alatti szöveges profil: a ténylegesen beállított preset és célérték; ha a jelenlét miatt
+   *  váltás várható (mindenki távol, a késleltetés még nem telt le), a váltás profilja és időpontja is. */
+  _presetText(ctx) {
+    const st = ctx.st, s = this._config.schedule || {};
+    const key = st.attributes?.preset_mode;
+    const cel = num(st.attributes?.temperature);
+    const most = key && key !== "none"
+      ? `${PRESET_HU[key] ?? key}${cel != null ? ` · ${fmt(cel)} °C` : ""}`
+      : (cel != null ? `${fmt(cel)} °C` : "–");
+    let jon = "";
+    if (ctx.presence?.state === "Távol" && s.away_preset && key !== s.away_preset && this._config.auto_entity
+        && ctx.auto?.state === "on") {
+      const mikor = new Date(new Date(ctx.presence.last_changed).getTime() + (s.away_delay_min || 0) * 60000);
+      if (mikor > new Date()) {
+        const t = num(st.attributes?.[`${s.away_preset}_temp`]);
+        const ido = mikor.toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
+        jon = ` <span class="pt-next">→ ${esc(PRESET_HU[s.away_preset] ?? s.away_preset)}${t != null ? ` · ${fmt(t)} °C` : ""} ${esc(ido)}-kor</span>`;
+      }
+    }
+    return `<span class="pt-label">Profil:</span> <b>${esc(most)}</b>${jon}`;
   }
 
   /** Ütemezés-szöveg: most melyik szakasz megy, mi a következő váltás. */
@@ -613,6 +638,7 @@ class HuFutesCard extends HuThermoCard {
       burning_entity: "binary_sensor.kazan_tenylegesen_fut",
       fault_entity: "input_boolean.kazan_hiba",
       plain_chips: true,
+      preset_text: true,
       season_entity: "input_select.futes_evszak",
       runtime_entity: "sensor.kazan_futesi_ido",
       gas_entity: "sensor.kazan_gaz_napi",
@@ -823,6 +849,10 @@ const STYLE = `
   .banner.warn { background: rgba(244,67,54,.14); color: var(--error-color, #f44336); }
   .banner.neutral { background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
   .banner span { color: var(--primary-text-color); }
+  .preset-text { text-align: center; font-size: 14px; color: var(--secondary-text-color); padding: 0 12px 6px; }
+  .preset-text:empty { display: none; }
+  .preset-text b { color: var(--primary-text-color); font-weight: 500; }
+  .preset-text .pt-next { color: var(--warning-color, #ff9800); white-space: nowrap; }
   .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 4px 12px 10px; }
   .chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px 5px 7px; border-radius: 18px;
     border: 1px solid var(--divider-color); font-size: .8rem; font-weight: 600; cursor: pointer;

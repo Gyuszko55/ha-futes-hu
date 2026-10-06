@@ -54,6 +54,8 @@ A presetek neve és a hőfokuk a termosztátban állítható.
 | | villogó piros láng | kazánhiba gyanú (`input_boolean.kazan_hiba`) |
 | | napocska | nincs fűtési igény: ki van kapcsolva, és a napi döntés sem kapcsolná be |
 | A benti hőmérséklet előtt | ház-ikon + fok, jelenlét-ikon | kinti hőmérséklet; Otthon (zöld szív) / Távol (szürke) / Szabadság (pálma) |
+| A gombok alatt | „Profil: Otthon · 22 °C” | a ténylegesen beállított preset és célhőmérséklet (a tárcsa ikonjából ez nem mindig derül ki) |
+| | „→ Távol · 18 °C 9:21-kor” (narancs) | mindenki elment: ekkor vált a jelenlét-automatika a távolléti presetre (a késleltetés letelte) |
 | Ikonsor | láng / áthúzott láng | a kazán most fűt / áll |
 | | PID % | a szabályzó kimenete (fűtési igény), csak Smart Thermostatnál |
 | | Hideg / Hűvös / Enyhe | évszak-sáv (PID-hangolás) |

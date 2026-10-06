@@ -11,6 +11,7 @@ opening:
   delay: 60                                 # ennyi mp után áll le a fűtés (az ablak-blueprintben beállított érték)
 humidity_sensor: sensor.nappali_paratartalom
 outdoor_entity: sensor.kulso_homerseklet    # a tárcsában, a benti hőmérséklet előtt
+# preset_text: true                         # „Profil: Otthon · 22 °C” a gombok alatt, várható jelenlét-váltással (alapból be; false = ki)
 # A csomag (hu_futes_kazan.yaml) entitásai az alapértékek – ha azt használod, ezeket nem kell megadni:
 # burning_entity: binary_sensor.kazan_tenylegesen_fut
 # fault_entity: input_boolean.kazan_hiba

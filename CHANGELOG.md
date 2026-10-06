@@ -1,5 +1,13 @@
 # Változások
 
+## 1.2.0 – 2026-10-06
+
+- **Termosztát-kártya – szöveges profil:** a `hu-futes-card` a gombok alatt kiírja a ténylegesen beállított presetet és
+  célhőmérsékletet („Profil: Otthon · 22 °C”) – a tárcsa ikonjából (pl. napocska) ez nem mindig derül ki. Ha mindenki
+  elment, és a jelenlét-automatika késleltetése még tart, a várható váltást is: „→ Távol · 18 °C 9:21-kor”.
+  Kikapcsolható: `preset_text: false`. A `hu-klima-card`-on alapból ki, `preset_text: true`-val bekapcsolható.
+  Frissítés után az erőforrás `?v=` számát emeld meg.
+
 ## 1.1.0 – 2026-10-04
 
 - **Célhőmérséklet vezérlési mód** mindkét blueprintben: preset nélküli termosztátoknál (pl. Honeywell Lyric T6,

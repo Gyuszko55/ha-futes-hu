@@ -57,7 +57,7 @@ const MORE_MENU = [
   ["settings", "mdi:cog-outline", "Beállítások"],
   ["related", "mdi:family-tree", "Kapcsolódó"],
 ];
-const VERSION = "1.1";
+const VERSION = "1.2";
 
 const PRESET_HU = {
   none: "Nincs", eco: "Takarékos", away: "Távol", comfort: "Kényelmes",
@@ -253,8 +253,8 @@ class HuThermoCard extends HTMLElement {
     const card = this._root.querySelector("ha-card").getBoundingClientRect();
     const b = btn.getBoundingClientRect();
     const m = this._el.menu;
-    m.innerHTML = MORE_MENU.map(([view, icon, label]) =>
-      `<div class="mitem" data-view="${view}"><ha-icon icon="${icon}"></ha-icon><span>${label}</span></div>`).join("");
+    m.innerHTML = [...MORE_MENU, ...this._menuItems()].map(([view, icon, label, toggle]) =>
+      `<div class="mitem" ${toggle ? `data-toggle="${esc(toggle)}"` : `data-view="${view}"`}><ha-icon icon="${icon}"></ha-icon><span>${label}</span></div>`).join("");
     m.style.top = `${b.bottom - card.top + 2}px`;
     m.style.right = `${card.right - b.right + 4}px`;
     m.hidden = false;
@@ -312,6 +312,7 @@ class HuThermoCard extends HTMLElement {
     if (!t) return;
     ev.stopPropagation();
     if (t.dataset.toggle) {
+      this._hideMenu();
       this._hass.callService("homeassistant", "toggle", { entity_id: t.dataset.toggle });
       return;
     }
@@ -357,6 +358,7 @@ class HuThermoCard extends HTMLElement {
   }
 
   _banner() { return ""; }
+  _menuItems() { return []; }
   _chips() { return []; }
 
   _chip(icon, text, color, more, title = "") {
@@ -632,7 +634,8 @@ class HuFutesCard extends HuThermoCard {
     return {
       entity: null,
       name: null,
-      opening: { sensor: null, name: "Ablak/ajtó", delay: 60 },  // érzékelő vagy csoport (a tagjait név szerint írja)
+      opening: { sensor: null, name: "Ablak/ajtó", delay: 60,  // érzékelő vagy csoport (a tagjait név szerint írja)
+        automation: null },  // az ablakfigyelő automatizálás – megadva a sávon kapcsoló kapcsolja ki/be
       humidity_sensor: null,
       outdoor_entity: null,
       burning_entity: "binary_sensor.kazan_tenylegesen_fut",
@@ -668,6 +671,8 @@ class HuFutesCard extends HuThermoCard {
     const c = this._config;
     const h = ctx.h;
     ctx.open = h.states[c.opening.sensor];
+    ctx.watch = c.opening.automation ? h.states[c.opening.automation] : undefined;
+    ctx.watchOff = ctx.watch?.state === "off";
     ctx.openMembers = (ctx.open?.attributes?.entity_id || [])
       .map((e) => h.states[e]).filter((s) => isOn(s));
     ctx.outdoor = h.states[c.outdoor_entity];
@@ -683,7 +688,7 @@ class HuFutesCard extends HuThermoCard {
     const off = ctx.st?.state === "off";
     // Ablak miatti leállás: a fűtés a nyitás után (a késleltetés letelte
     // körül) kapcsolt ki, és a nyílászáró még mindig nyitva van.
-    ctx.paused = off && isOn(ctx.open) &&
+    ctx.paused = off && !ctx.watchOff && isOn(ctx.open) &&
       new Date(ctx.st.last_changed).getTime() >= new Date(ctx.open.last_changed).getTime() + (c.opening.delay - 10) * 1000;
     // Nincs fűtési igény (napocska a tárcsán): ki van kapcsolva, nem ablak
     // miatt, és a napi döntés sem kapcsolná be (tegnapi átlag vagy szobahő magas).
@@ -696,7 +701,7 @@ class HuFutesCard extends HuThermoCard {
   }
 
   _signature(ctx) {
-    return [...super._signature(ctx), ctx.open?.state, ctx.open?.last_changed,
+    return [...super._signature(ctx), ctx.open?.state, ctx.open?.last_changed, ctx.watch?.state,
       ctx.openMembers.map((s) => s.entity_id), ctx.outdoor?.state, ctx.burning?.state, ctx.fault?.state,
       ctx.season?.state, ctx.runtime?.state, ctx.gas?.state, ctx.gasYearly?.state, ctx.decideSt?.state, ctx.indoorSt?.state, ctx.hum?.state];
   }
@@ -753,20 +758,46 @@ class HuFutesCard extends HuThermoCard {
       return `<div class="banner warn" data-more="${esc(o.sensor)}"><ha-icon icon="mdi:window-closed-variant"></ha-icon>
         <span>Az ablak/ajtó-érzékelők csoportja nem elérhető</span></div>`;
     }
+    const sw = this._watchSwitch(ctx);
+    if (ctx.watchOff) {
+      if (!isOn(ctx.open)) {
+        return `<div class="banner neutral" data-more="${esc(o.automation)}"><ha-icon icon="mdi:window-closed-variant"></ha-icon>
+          <span>Ablakfigyelés kikapcsolva – nyitott ablak/ajtó nem állítja le a fűtést</span>${sw}</div>`;
+      }
+      const names = this._openNames(ctx) || esc(o.name);
+      return `<div class="banner neutral" data-more="${esc(ctx.openMembers[0]?.entity_id || o.sensor)}"><ha-icon icon="mdi:door-open"></ha-icon>
+        <span>Nyitva: <b>${names}</b> (${ago(ctx.open.last_changed)}) – ablakfigyelés kikapcsolva, a fűtés nem áll le</span>${sw}</div>`;
+    }
     if (!isOn(ctx.open)) return "";
     const names = this._openNames(ctx) || esc(o.name);
     const more = esc(ctx.openMembers[0]?.entity_id || o.sensor);
     if (ctx.st?.state === "off" && !ctx.paused) {
       return `<div class="banner neutral" data-more="${more}"><ha-icon icon="mdi:door-open"></ha-icon>
-        <span>Nyitva: <b>${names}</b> (${ago(ctx.open.last_changed)}) – a fűtés most nem megy, nincs hatása</span></div>`;
+        <span>Nyitva: <b>${names}</b> (${ago(ctx.open.last_changed)}) – a fűtés most nem megy, nincs hatása</span>${sw}</div>`;
     }
     if (ctx.paused) {
       return `<div class="banner info" data-more="${more}"><ha-icon icon="mdi:window-open-variant"></ha-icon>
-        <span>Nyitva: <b>${names}</b> (${ago(ctx.open.last_changed)}) – a fűtés szünetel, bezáráskor visszakapcsol</span></div>`;
+        <span>Nyitva: <b>${names}</b> (${ago(ctx.open.last_changed)}) – a fűtés szünetel, bezáráskor visszakapcsol</span>${sw}</div>`;
     }
     const left = Math.max(0, o.delay - secsSince(ctx.open.last_changed));
     return `<div class="banner amber" data-more="${more}"><ha-icon icon="mdi:window-open-variant"></ha-icon>
-      <span>Nyitva: <b>${names}</b> – ${left > 0 ? `${Math.ceil(left)} mp múlva leáll a fűtés` : "a fűtés hamarosan leáll"}</span></div>`;
+      <span>Nyitva: <b>${names}</b> – ${left > 0 ? `${Math.ceil(left)} mp múlva leáll a fűtés` : "a fűtés hamarosan leáll"}</span>${sw}</div>`;
+  }
+
+  /** Az ablakfigyelő automatizálás kapcsolója a sáv jobb szélén. */
+  _watchSwitch(ctx) {
+    if (!ctx.watch || bad(ctx.watch)) return "";
+    const on = !ctx.watchOff;
+    return `<div class="bsw" data-toggle="${esc(this._config.opening.automation)}"
+      title="Ablakfigyelés ${on ? "bekapcsolva – kattints a kikapcsoláshoz" : "kikapcsolva – kattints a bekapcsoláshoz"}">
+      <small>Figyelés</small><div class="switch sm ${on ? "on" : ""}"><div class="knob"></div></div></div>`;
+  }
+
+  _menuItems() {
+    const ctx = this._context();
+    if (!ctx.watch || bad(ctx.watch)) return [];
+    return [[null, ctx.watchOff ? "mdi:window-open-variant" : "mdi:window-closed-variant",
+      ctx.watchOff ? "Ablakfigyelés bekapcsolása" : "Ablakfigyelés kikapcsolása", this._config.opening.automation]];
   }
 
   // A tárcsa már mutatja: szobahőmérséklet, célhő, páratartalom, állapot;
@@ -848,7 +879,12 @@ const STYLE = `
   .banner.amber { background: rgba(255,152,0,.16); color: var(--warning-color, #ff9800); }
   .banner.warn { background: rgba(244,67,54,.14); color: var(--error-color, #f44336); }
   .banner.neutral { background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
-  .banner span { color: var(--primary-text-color); }
+  .banner span { color: var(--primary-text-color); flex: 1; min-width: 0; }
+  .bsw { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; cursor: pointer; }
+  .bsw small { font-size: .68rem; color: var(--secondary-text-color); }
+  .switch.sm { width: 34px; height: 20px; }
+  .switch.sm .knob { width: 14px; height: 14px; }
+  .switch.sm.on .knob { left: 17px; }
   .preset-text { text-align: center; font-size: 14px; color: var(--secondary-text-color); padding: 0 12px 6px; }
   .preset-text:empty { display: none; }
   .preset-text b { color: var(--primary-text-color); font-weight: 500; }

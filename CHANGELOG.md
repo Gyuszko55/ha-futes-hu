@@ -1,5 +1,14 @@
 # Változások
 
+## 1.3.0 – 2026-10-07
+
+- **Termosztát-kártya – ablakfigyelés-kapcsoló:** új `opening.automation` opció (az ablakfigyelő automatizálás, pl. a
+  „Window open, climate off” blueprint példánya). Megadva a sáv jobb szélén „Figyelés” kapcsoló jelenik meg, ha minden
+  zárva, a ⋮ menüben „Ablakfigyelés ki/bekapcsolása”. Kikapcsolt figyelésnél a sáv szürkén, folyamatosan jelzi:
+  „Ablakfigyelés kikapcsolva – nyitott ablak/ajtó nem állítja le a fűtést”, nyitott ajtónál „… a fűtés nem áll le”;
+  a tárcsa ilyenkor nem mutat „ablak miatt szünetel” állapotot. Opció nélkül a kártya változatlan.
+  Frissítés után az erőforrás `?v=` számát emeld meg.
+
 ## 1.2.0 – 2026-10-06
 
 - **Termosztát-kártya – szöveges profil:** a `hu-futes-card` a gombok alatt kiírja a ténylegesen beállított presetet és

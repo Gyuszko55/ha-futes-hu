@@ -9,6 +9,8 @@ opening:
   sensor: binary_sensor.ablakok_ajtok       # ablak/ajtó érzékelő vagy csoport (csoportnál a tagokat név szerint írja)
   name: Ablak/ajtó
   delay: 60                                 # ennyi mp után áll le a fűtés (az ablak-blueprintben beállított érték)
+  automation: automation.window_open_climate_off  # az ablakfigyelő automatizálás (pl. „Window open, climate off”):
+                                            # megadva a sávon „Figyelés” kapcsoló és ⋮ menüpont kapcsolja ki/be
 humidity_sensor: sensor.nappali_paratartalom
 outdoor_entity: sensor.kulso_homerseklet    # a tárcsában, a benti hőmérséklet előtt
 # preset_text: true                         # „Profil: Otthon · 22 °C” a gombok alatt, várható jelenlét-váltással (alapból be; false = ki)

@@ -50,6 +50,10 @@ A presetek neve és a hőfokuk a termosztátban állítható.
 | Sáv a tárcsa fölött | „Nyitva: … – X mp múlva leáll a fűtés” (narancs) | nyitott ablak/ajtó, a késleltetés még nem telt le |
 | | „… – a fűtés szünetel” (kék) | a fűtés az ablak miatt leállt, bezáráskor visszakapcsol |
 | | „… – a fűtés most nem megy, nincs hatása” (szürke) | nyitva van, de a fűtés amúgy is ki van kapcsolva |
+| | „Nyitva: … – ablakfigyelés kikapcsolva, a fűtés nem áll le” (szürke) | az ablakfigyelő automatizálás ki van kapcsolva |
+| | „Ablakfigyelés kikapcsolva – nyitott ablak/ajtó nem állítja le a fűtést” (szürke) | minden zárva, de a figyelés ki van kapcsolva – a sáv emlékeztetőül marad |
+| | „Az ablak/ajtó-érzékelők csoportja nem elérhető” (piros) | az érzékelő vagy csoport nem elérhető |
+| Sáv jobb széle | „Figyelés” kapcsoló | az ablakfigyelő automatizálás be/ki (`opening.automation` megadásakor). Hasznos, ha hosszabb ideig nyitva hagyod az ajtót, de fűtsön. Ha minden zárva, a ⋮ menüben: „Ablakfigyelés ki/bekapcsolása” |
 | Tárcsa közepe | Zzz / láng / szünet / főkapcsoló | vár / fűt / ablak miatt szünetel / kikapcsolva |
 | | villogó piros láng | kazánhiba gyanú (`input_boolean.kazan_hiba`) |
 | | napocska | nincs fűtési igény: ki van kapcsolva, és a napi döntés sem kapcsolná be |
@@ -76,4 +80,5 @@ A tárcsán a Better Thermostat UI saját elem- és kapcsolatjelzései is műkö
 | A gázbecslés „nem elérhető” | A kazán névleges teljesítménye 0. | Add meg a segédek között. |
 | A kazánhiba-jelző indokolatlanul bekapcsolt | Rövid, erős hőveszteség (szellőztetés), vagy lassú radiátorkör. | Add meg az ablakérzékelőket (6. szekció), vagy növeld a riasztási időt. |
 | A jelenlét nem vált Távolra | A személy nem szerepel, vagy kizártad; a telefon helyzete késik. | Nézd meg a `sensor.haztartas_jelenlet` attribútumait (`szemelyek`, `otthon`). |
+| Nyitott ajtónál nem áll le a fűtés | Ki van kapcsolva az ablakfigyelés (szürke sáv). | Kapcsold be a sáv „Figyelés” kapcsolójával vagy a ⋮ menüben. |
 | A PID-hangolás nem fut | Nem Smart Thermostat a termosztát. | Ezt a szekciót hagyd kikapcsolva. |

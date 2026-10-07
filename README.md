@@ -8,7 +8,7 @@ Egy valós, gázkazános, radiátoros otthoni fűtésrendszerből általánosít
 | **Jelenlét alapú preset blueprint** | Otthon / Távol / Szabadság szerint vált presetet (fűtés, klíma), éjjel az éjszakai presettel érkezik |
 | **Háztartás-jelenlét csomag** | `sensor.haztartas_jelenlet`: Otthon / Távol / Szabadság (12 óra után) az összes `person` entitásból, beállítás nélkül. A zóna („Munkahely”) is távollétnek számít. |
 | **Kazán csomag** | tényleges fűtés (relé és fogyasztás), napi fűtési idő, **gázfogyasztás-becslés gázmérő nélkül**, benti hőmérséklet-trend, kazánhiba-jelző, automatika-kapcsoló, évszak-sáv |
-| **Termosztát-kártya** (`hu-futes-card`, `hu-klima-card`) | a Better Thermostat UI tárcsáját egészíti ki: ablak-sáv, ikonsor, kinti hő és jelenlét a tárcsában, villogó hibajelzés, nyári pihenő (napocska), szöveges profil („Profil: Otthon · 22 °C”, várható jelenlét-váltással), automatika-sor, ⋮ menü |
+| **Termosztát-kártya** (`hu-futes-card`, `hu-klima-card`) | a Better Thermostat UI tárcsáját egészíti ki: ablak-sáv (ablakfigyelés-kapcsolóval), ikonsor, kinti hő és jelenlét a tárcsában, villogó hibajelzés, nyári pihenő (napocska), szöveges profil („Profil: Otthon · 22 °C”, várható jelenlét-váltással), automatika-sor, ⋮ menü |
 
 ![Fűtés kártya](docs/kepek/futes_kartya.png)
 
@@ -113,7 +113,7 @@ Létrejövő entitások:
 
 1. Másold a `www/hu-termosztat/hu-termosztat.js` fájlt a `config/www/hu-termosztat/` mappába. A fenti terminálparancs ezt is megcsinálja.
 2. Beállítások → Irányítópultok → ⋮ → **Erőforrások** → hozzáadás:
-   - URL: `/local/hu-termosztat/hu-termosztat.js?v=2`
+   - URL: `/local/hu-termosztat/hu-termosztat.js?v=3`
    - Típus: **JavaScript modul**
 
    Ha nem látod az Erőforrásokat, a profilodban kapcsold be a Haladó módot.
@@ -125,6 +125,7 @@ entity: climate.futes
 outdoor_entity: sensor.kulso_homerseklet
 opening:
   sensor: binary_sensor.ablakok_ajtok
+  automation: automation.window_open_climate_off   # opcionális: ablakfigyelés-kapcsoló a sávon
 ```
 
 Az összes beállítás magyarázattal: [dashboard/kartya_peldak.yaml](dashboard/kartya_peldak.yaml). Frissítés után a `?v=` számot emeld meg, hogy a böngésző ne a régit használja.

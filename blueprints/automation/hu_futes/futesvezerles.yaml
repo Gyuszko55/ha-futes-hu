@@ -598,6 +598,16 @@ variables:
        (window_door_sensors | select('is_state', 'on') | list | count > 0) }}
   anyone_home: >
     {{ persons | select('is_state', 'home') | list | count > 0 }}
+  # Az időpont-trigger leállás alatt elveszik: ha a HA épp az éjszakai / nappali váltáskor indult újra, induláskor
+  # pótoljuk – ha a váltás az elmúlt 15 percben esett ki (napközbeni újraindítás nem írja felül a kézi beállítást).
+  missed_setback: >
+    {% set ok = namespace(v='') %}
+    {% if trigger.id == 'startup' %}
+      {% for nev, ido in [('night', night_start_v), ('day', day_start_v)] %}
+        {% if 0 <= (now() - today_at(ido)).total_seconds() < 900 %}{% set ok.v = nev %}{% endif %}
+      {% endfor %}
+    {% endif %}
+    {{ ok.v }}
   all_away: >
     {{ persons | count > 0 and not anyone_home }}
   in_night_window: >
@@ -606,6 +616,35 @@ variables:
        else (night_start_v <= n < day_start_v) }}
 
 actions:
+  # 1/b. ÉJSZAKAI VISSZAVÉTEL PÓTLÁSA INDULÁSKOR (ha a 22:00 / 06:00-s váltás épp az újraindítás alatt esett ki)
+  - if:
+      - "{{ trigger.id == 'startup' and use_night_setback and missed_setback != '' }}"
+      - "{{ not night_requires_presence or anyone_home }}"
+    then:
+      - variables:
+          cel: "{{ missed_setback }}"
+      - if: "{{ control_mode == 'temperature' }}"
+        then:
+          - if: "{{ hold_preset | trim != '' }}"
+            then:
+              - action: climate.set_preset_mode
+                target:
+                  entity_id: "{{ climate_entity }}"
+                data:
+                  preset_mode: "{{ hold_preset | trim }}"
+                continue_on_error: true
+          - action: climate.set_temperature
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              temperature: "{{ temps[cel] | float }}"
+        else:
+          - action: climate.set_preset_mode
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              preset_mode: "{{ presets[cel] }}"
+
   - choose:
       # 1. ÉJSZAKAI VISSZAVÉTEL
       - conditions:

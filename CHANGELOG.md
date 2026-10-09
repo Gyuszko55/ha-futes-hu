@@ -1,5 +1,16 @@
 # Változások
 
+## 1.4.0 – 2026-10-10
+
+- **Fűtésvezérlő blueprint – éjszakai visszavétel pótlása:** ha a Home Assistant épp az éjszakai vagy a nappali
+  váltáskor indul újra, induláskor pótolja (ha a váltás az elmúlt 15 percben esett ki). Korábban az időpont-trigger
+  a leállás alatt elveszett, és a termosztát a következő váltásig a régi presetben maradt. Napközbeni újraindítás
+  nem írja felül a kézi beállítást.
+- **Smart Thermostat példa:** `sampling_period: 0`. A Smart Thermostat 2026.10-től induláskor az első mintavételig
+  nem számol PID-et, ezért `300` mellett minden HA-újraindítás után 5 percig felesleges kazánégés lehetett.
+- **README:** új „Telefonok beállítása a jelenléthez” rész (helyhozzáférés, akkumulátor-korlátozás, ellenőrzés);
+  a hibaelhárítás két új sorral bővült.
+
 ## 1.3.0 – 2026-10-07
 
 - **Termosztát-kártya – ablakfigyelés-kapcsoló:** új `opening.automation` opció (az ablakfigyelő automatizálás, pl. a

@@ -16,7 +16,10 @@
   target_temp: 22
   min_cycle_duration: "00:05:00"           # kazánvédelem
   min_off_cycle_duration: "00:10:00"
-  sampling_period: 300                     # 5 perc
+  # FONTOS (Smart Thermostat 2026.10.0-tól): a PID-et a sampling_period időzítője számolja, induláskor viszont
+  # nem – 300 mellett minden HA-újraindítás után 5 percig rossz kimenettel (és a min. égésidő miatt 5 perc
+  # felesleges kazánégéssel) indult. 0 = a PID minden új hőmérséklet-értéknél számol, az újraindítás után is.
+  sampling_period: 0
   pwm: "00:30:00"                          # radiátorhoz
   kp: 10
   ki: 0.00015                              # a blueprint 4. szekciója évszakonként állítja

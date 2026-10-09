@@ -28,14 +28,14 @@ Egy valós, gázkazános, radiátoros otthoni fűtésrendszerből általánosít
 | 3 | **Benti hőmérő** a fő helyiségben | a hőmérő integrációja | igen |
 | 4 | **Kinti hőmérő** (időjárás-állomás vagy kültéri szenzor) | a szenzor integrációja | a napi döntéshez és a PID-hangoláshoz |
 | 5 | **Egy termosztát (`climate`) presetekkel**: | | igen |
-|   | – [Smart Thermostat (PID)](https://github.com/ScratMan/HASmartThermostat) (ajánlott, a PID-hangoláshoz ez kell) | HACS → Integrációk → „Smart Thermostat (PID)” → Letöltés → újraindítás → YAML-beállítás: [docs/pelda_smart_thermostat.yaml](docs/pelda_smart_thermostat.yaml) | |
+|   | – [Smart Thermostat (PID)](https://github.com/ScratMan/HASmartThermostat) (ajánlott, a PID-hangoláshoz ez kell) | HACS → Integrációk → „Smart Thermostat (PID)” → Letöltés → újraindítás → YAML-beállítás: [docs/pelda_smart_thermostat.yaml](docs/pelda_smart_thermostat.yaml). **2026.10-től `sampling_period: 0` legyen** – lásd a példa megjegyzését. | |
 |   | – vagy a beépített `generic_thermostat` presetekkel | configuration.yaml | |
 |   | – vagy **preset nélküli termosztát** (pl. Honeywell Lyric T6, HomeKit-es termosztátok, Zigbee-fejek): a blueprintekben a „Célhőmérséklet” vezérlési mód – lásd lent | a termosztát integrációja | |
 | 6 | **[HACS](https://hacs.xyz/)** | https://hacs.xyz/docs/use/ | a 5. és 7. ponthoz |
 | 7 | **Better Thermostat UI** kártya | HACS → Frontend → „Better Thermostat UI” → Letöltés | a kártyához |
 | 8 | **Teljesítménymérő a kazánon** (pl. Shelly Plug) | a mérő integrációja | nem. Ha van, a „tényleges fűtés” pontosabb. |
 | 9 | **Ablak/ajtó-nyitásérzékelők** és a „Window open, climate off” közösségi blueprint (SmartLiving.Rocks, Blueprint Exchange) | az érzékelők integrációja; Blueprint importálása | nem, de ajánlott |
-| 10 | **Home Assistant Companion app** a telefonokon, `person` entitásokhoz rendelve | App Store / Google Play; Beállítások → Emberek | a jelenléthez |
+| 10 | **Home Assistant Companion app** a telefonokon, `person` entitásokhoz rendelve, **„Mindig” helyhozzáféréssel és akkumulátor-korlátozás nélkül** | App Store / Google Play; Beállítások → Emberek; részletesen lent: [Telefonok beállítása](#telefonok-beállítása-a-jelenléthez) | a jelenléthez |
 | 11 | **Csomagok bekapcsolása** a `configuration.yaml`-ban (`packages: !include_dir_named packages`) | lásd lent, 2. lépés | a csomagokhoz |
 
 ## Telepítés
@@ -108,6 +108,24 @@ Létrejövő entitások:
 - A Lyric T6 a **Honeywell Lyric** integrációval (felhő) vagy – mivel Apple HomeKit-képes – a **HomeKit-eszköz** integrációval (helyi) kerül a HA-ba.
 - A Lyric integráció presetjei nem hőmérséklet-profilok, hanem az ütemezés tartási módjai. Hogy a termosztát saját ütemezése a következő ütemezési időpontban ne írja felül a beállított hőmérsékletet, a *Tartás preset* mezőbe add meg a tartó presetet (pl. `PermanentHold` – a pontos nevet lásd: Fejlesztői eszközök → Állapotok → a `climate` entitás `preset_modes` attribútuma). HomeKit-en át nincs preset: ott a termosztát saját ütemezését kapcsold ki a Lyric alkalmazásban.
 - A PID-hangolás (4. szekció) Smart Thermostat-specifikus, Lyricnél hagyd kikapcsolva.
+
+### Telefonok beállítása a jelenléthez
+
+A távollét, a Szabadság és az érkezés a telefonok helyzetéből jön. Ha egy telefon helyzete nem frissül a háttérben,
+a fűtés nem vált Távolra (vagy az érkezéskor későn kapcsol vissza). Minden családtag telefonján:
+
+1. **Helymeghatározás: „Mindig engedélyezve” és „Pontos hely”** a Home Assistant appnak (telefon beállításai →
+   Alkalmazások → Home Assistant → Engedélyek → Hely).
+2. **Akkumulátor: korlátozás nélkül** (Alkalmazások → Home Assistant → Akkumulátor → „Nincs korlátozás”).
+   **Xiaomi / Redmi / POCO:** az **Automatikus indítás** is legyen bekapcsolva. **Samsung:** vedd ki az „Alvó
+   alkalmazások” közül. Különben a rendszer a háttérben leállítja az appot.
+3. **Az appban** (Beállítások → Companion app → Szenzorok kezelése) a **háttérbeli helymeghatározás** legyen
+   bekapcsolva, és a `person` entitáshoz (Beállítások → Emberek) a telefon `device_tracker`-e legyen hozzárendelve.
+4. **Ellenőrzés:** sétálj el otthonról – a `person` entitás pár percen belül váltson „Távol”-ra (vagy egy zóna nevére),
+   hazaérve „Otthon”-ra. A `sensor.haztartas_jelenlet` attribútumaiban (`szemelyek`, `otthon`) látszik, ki számít.
+
+Aki ideiglenesen nem lakik otthon, vagy vendég telefonja van felvéve, azt a *Jelenlét – kizárt személyek* segédben
+add meg, különben „otthon”-nak számíthat, vagy éppen nem engedi a Távol állapotot.
 
 ### 4. Kártya
 

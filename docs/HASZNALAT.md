@@ -79,6 +79,8 @@ A tárcsán a Better Thermostat UI saját elem- és kapcsolatjelzései is műkö
 | A kártya nem frissült a fájlcsere után | Böngésző-gyorsítótár. | Emeld meg az erőforrás `?v=` számát. |
 | A gázbecslés „nem elérhető” | A kazán névleges teljesítménye 0. | Add meg a segédek között. |
 | A kazánhiba-jelző indokolatlanul bekapcsolt | Rövid, erős hőveszteség (szellőztetés), vagy lassú radiátorkör. | Add meg az ablakérzékelőket (6. szekció), vagy növeld a riasztási időt. |
-| A jelenlét nem vált Távolra | A személy nem szerepel, vagy kizártad; a telefon helyzete késik. | Nézd meg a `sensor.haztartas_jelenlet` attribútumait (`szemelyek`, `otthon`). |
+| A jelenlét nem vált Távolra | A személy nem szerepel, vagy kizártad; a telefon helyzete késik (nincs „Mindig” helyhozzáférés, vagy az akkumulátorkímélő leállítja az appot). | Nézd meg a `sensor.haztartas_jelenlet` attribútumait (`szemelyek`, `otthon`), és a README „Telefonok beállítása” lépéseit. |
+| HA-újraindítás után a kazán pár percig fölöslegesen ég | Smart Thermostat 2026.10-től: induláskor a PID az első mintavételig nem számol (`sampling_period: 300`). | `sampling_period: 0` a termosztát beállításában (lásd docs/pelda_smart_thermostat.yaml), majd `smart_thermostat.reload`. |
+| Újraindítás után nem váltott éjszakai/nappali presetre | Az időpont-trigger a leállás alatt elveszik. | 1.4.0-tól a blueprint induláskor pótolja, ha a váltás az elmúlt 15 percben esett ki – frissítsd a blueprintet. |
 | Nyitott ajtónál nem áll le a fűtés | Ki van kapcsolva az ablakfigyelés (szürke sáv). | Kapcsold be a sáv „Figyelés” kapcsolójával vagy a ⋮ menüben. |
 | A PID-hangolás nem fut | Nem Smart Thermostat a termosztát. | Ezt a szekciót hagyd kikapcsolva. |

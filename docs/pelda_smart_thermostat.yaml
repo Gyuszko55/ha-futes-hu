@@ -19,6 +19,8 @@
   # FONTOS (Smart Thermostat 2026.10.0-tól): a PID-et a sampling_period időzítője számolja, induláskor viszont
   # nem – 300 mellett minden HA-újraindítás után 5 percig rossz kimenettel (és a min. égésidő miatt 5 perc
   # felesleges kazánégéssel) indult. 0 = a PID minden új hőmérséklet-értéknél számol, az újraindítás után is.
+  # Ez önmagában nem elég: kis pozitív kimenetnél (pl. a kinti korrekció miatt) induláskor így is egy
+  # min_cycle_duration hosszú égés lesz – azt a fűtésvezérlő blueprint 4. szekciója állítja meg (1.5.0-tól).
   sampling_period: 0
   pwm: "00:30:00"                          # radiátorhoz
   kp: 10

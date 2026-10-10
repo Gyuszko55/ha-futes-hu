@@ -1,5 +1,17 @@
 # Változások
 
+## 1.5.0 – 2026-10-10
+
+- **Fűtésvezérlő blueprint – újraindítás utáni fölösleges kazánégés megállítása** (4. szekció, alapból bekapcsolva,
+  csak Smart Thermostat esetén lép működésbe). A Smart Thermostat induláskor nullázza az utolsó kazánkapcsolás
+  idejét, ezért ha a PID-kimenet akár 1 % (enyhe időben gyakran csak a kinti korrekció miatt), induláskor azonnal
+  bekapcsol, és a `min_cycle_duration` végéig (pl. 5 perc) ég – akkor is, ha bent már meleg van. A `sampling_period: 0`
+  ezt nem szünteti meg. Ha induláskor a kazán ég, de bent a cél (+ beállítható tűrés) már megvan, a blueprint egy
+  rövid ki → fűtés váltással leállítja; a kényszerített kikapcsolás újraindítja a termosztát belső óráját, ezért utána
+  kivárja a normál szünetet. A PID integrálját nem törli. A cél alatt (hidegben) az indulási égés jogos, ahhoz nem nyúl.
+  Napló: „újraindítás utáni fölösleges kazánégés megállítva”.
+- **Leírás:** a hibaelhárítás, a README és a Smart Thermostat példa megjegyzése a fenti két okkal frissült.
+
 ## 1.4.0 – 2026-10-10
 
 - **Fűtésvezérlő blueprint – éjszakai visszavétel pótlása:** ha a Home Assistant épp az éjszakai vagy a nappali

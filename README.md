@@ -4,7 +4,7 @@ Egy valós, gázkazános, radiátoros otthoni fűtésrendszerből általánosít
 
 | Rész | Mit csinál |
 |---|---|
-| **Fűtésvezérlő blueprint** | Hat, egyenként bekapcsolható szekció: éjszakai visszavétel, távollét, napi be/ki döntés hiszterézissel, évszakonkénti PID-hangolás (Smart Thermostat), kazánhiba-figyelő magától törlődő jelzővel, ablak/ajtó-figyelembevétel |
+| **Fűtésvezérlő blueprint** | Hat, egyenként bekapcsolható szekció: éjszakai visszavétel, távollét, napi be/ki döntés hiszterézissel, évszakonkénti PID-hangolás és az újraindítás utáni fölösleges kazánégés megállítása (Smart Thermostat), kazánhiba-figyelő magától törlődő jelzővel, ablak/ajtó-figyelembevétel |
 | **Jelenlét alapú preset blueprint** | Otthon / Távol / Szabadság szerint vált presetet (fűtés, klíma), éjjel az éjszakai presettel érkezik |
 | **Háztartás-jelenlét csomag** | `sensor.haztartas_jelenlet`: Otthon / Távol / Szabadság (12 óra után) az összes `person` entitásból, beállítás nélkül. A zóna („Munkahely”) is távollétnek számít. |
 | **Kazán csomag** | tényleges fűtés (relé és fogyasztás), napi fűtési idő, **gázfogyasztás-becslés gázmérő nélkül**, benti hőmérséklet-trend, kazánhiba-jelző, automatika-kapcsoló, évszak-sáv |
@@ -28,7 +28,7 @@ Egy valós, gázkazános, radiátoros otthoni fűtésrendszerből általánosít
 | 3 | **Benti hőmérő** a fő helyiségben | a hőmérő integrációja | igen |
 | 4 | **Kinti hőmérő** (időjárás-állomás vagy kültéri szenzor) | a szenzor integrációja | a napi döntéshez és a PID-hangoláshoz |
 | 5 | **Egy termosztát (`climate`) presetekkel**: | | igen |
-|   | – [Smart Thermostat (PID)](https://github.com/ScratMan/HASmartThermostat) (ajánlott, a PID-hangoláshoz ez kell) | HACS → Integrációk → „Smart Thermostat (PID)” → Letöltés → újraindítás → YAML-beállítás: [docs/pelda_smart_thermostat.yaml](docs/pelda_smart_thermostat.yaml). **2026.10-től `sampling_period: 0` legyen** – lásd a példa megjegyzését. | |
+|   | – [Smart Thermostat (PID)](https://github.com/ScratMan/HASmartThermostat) (ajánlott, a PID-hangoláshoz ez kell) | HACS → Integrációk → „Smart Thermostat (PID)” → Letöltés → újraindítás → YAML-beállítás: [docs/pelda_smart_thermostat.yaml](docs/pelda_smart_thermostat.yaml). **2026.10-től `sampling_period: 0` legyen** – lásd a példa megjegyzését. Az újraindítás utáni égést a fűtésvezérlő blueprint 4. szekciója (1.5.0-tól, alapból be) állítja meg. | |
 |   | – vagy a beépített `generic_thermostat` presetekkel | configuration.yaml | |
 |   | – vagy **preset nélküli termosztát** (pl. Honeywell Lyric T6, HomeKit-es termosztátok, Zigbee-fejek): a blueprintekben a „Célhőmérséklet” vezérlési mód – lásd lent | a termosztát integrációja | |
 | 6 | **[HACS](https://hacs.xyz/)** | https://hacs.xyz/docs/use/ | a 5. és 7. ponthoz |

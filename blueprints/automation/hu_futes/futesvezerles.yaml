@@ -28,6 +28,8 @@ blueprint:
     enélkül egy stabil időszakban történő újraindítás után a gain a
     climate entitás YAML-ban rögzített induló értékén ragadna, amíg egy
     valódi új sávváltás nem történik (ez akár hetekig is eltarthat).
+    A 4. szekcióban (alapból bekapcsolva) az újraindítás utáni
+    fölösleges kazánégést is megállítja (lásd ott).
     5. KAZÁN-/HŐTERMELŐ-FELÜGYELET - riaszt, ha a fűtés hosszú ideje
     folyamatosan megy, de a beltéri hőmérséklet mégsem emelkedik
     (lehetséges lángőr-hiba, gázhiány, légzár, szivattyú-hiba stb.).
@@ -286,6 +288,33 @@ blueprint:
         vezethet gain-váltás után.
       collapsed: true
       input:
+        stop_startup_burn:
+          name: Újraindítás utáni fölösleges égés megállítása
+          description: >
+            A Smart Thermostat induláskor nem emlékszik, mikor kapcsolt
+            utoljára a kazán, ezért ha a PID-kimenet akár 1 % (pl. csak a
+            kinti korrekció miatt), induláskor azonnal bekapcsol, és a
+            minimális égésidő (min_cycle_duration) miatt végig is ég -
+            akkor is, ha bent már meleg van. Bekapcsolva: ha induláskor a
+            kazán ég, de bent a cél (+ az alábbi tűrés) már megvan, egy
+            rövid ki → fűtés váltással leállítja (a PID integrálját nem
+            törli). Hidegben, a cél alatt az indulási égés jogos, ahhoz
+            nem nyúl. A szezonális hangolástól függetlenül működik.
+          default: true
+          selector:
+            boolean:
+        startup_burn_margin:
+          name: Tűrés az égés megállításához
+          description: >
+            Csak akkor állítja le, ha bent legalább ennyivel a cél fölött
+            van (0 = már a cél elérésekor).
+          default: 0
+          selector:
+            number:
+              min: -0.5
+              max: 1
+              step: 0.1
+              unit_of_measurement: "°C"
         use_pid_seasonal_tuning:
           name: Szezonális PID-hangolás használata
           default: false
@@ -574,6 +603,8 @@ variables:
   turn_off_outdoor_above: !input turn_off_outdoor_above
   turn_off_indoor_above: !input turn_off_indoor_above
   use_pid_seasonal_tuning: !input use_pid_seasonal_tuning
+  stop_startup_burn: !input stop_startup_burn
+  startup_burn_margin: !input startup_burn_margin
   pid_outdoor_list: !input pid_outdoor_sensor
   pid_outdoor_sensor: "{{ pid_outdoor_list | first if pid_outdoor_list else '' }}"
   winter_threshold: !input winter_threshold
@@ -616,6 +647,43 @@ variables:
        else (night_start_v <= n < day_start_v) }}
 
 actions:
+  # 0. ÚJRAINDÍTÁS UTÁNI FÖLÖSLEGES ÉGÉS MEGÁLLÍTÁSA (Smart Thermostat)
+  # A Smart Thermostat induláskor 0-ra állítja az utolsó kazánkapcsolás idejét, így bármilyen pozitív kimenetnél
+  # azonnal bekapcsol (a „HA elindult” esemény ELŐTT, pár másodperccel), és a min. égésidő végéig ég. A ki → fűtés
+  # váltás kényszerített kikapcsolása (force) újraindítja ezt az órát, utána a termosztát kivárja a normál szünetet.
+  - if:
+      - "{{ trigger.id == 'startup' and stop_startup_burn and is_state(climate_entity, 'heat') }}"
+      # csak Smart Thermostat (annak van kp attribútuma) – más termosztátnál nincs ilyen hiba
+      - "{{ state_attr(climate_entity, 'kp') is not none }}"
+    then:
+      - wait_template: "{{ state_attr(climate_entity, 'hvac_action') == 'heating' }}"
+        timeout: "00:01:00"
+        continue_on_timeout: true
+      - variables:
+          bent: "{{ state_attr(climate_entity, 'current_temperature') }}"
+          cel_hom: "{{ state_attr(climate_entity, 'temperature') }}"
+      - if:
+          - "{{ wait.completed and bent is number and cel_hom is number and bent >= cel_hom + (startup_burn_margin | float(0)) }}"
+        then:
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              hvac_mode: "off"
+          - delay:
+              seconds: 2
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: "{{ climate_entity }}"
+            data:
+              hvac_mode: heat
+          - action: logbook.log
+            data:
+              name: Fűtésvezérlés
+              entity_id: "{{ climate_entity }}"
+              message: >-
+                újraindítás utáni fölösleges kazánégés megállítva (bent {{ bent }} °C, cél {{ cel_hom }} °C)
+
   # 1/b. ÉJSZAKAI VISSZAVÉTEL PÓTLÁSA INDULÁSKOR (ha a 22:00 / 06:00-s váltás épp az újraindítás alatt esett ki)
   - if:
       - "{{ trigger.id == 'startup' and use_night_setback and missed_setback != '' }}"
